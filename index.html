@@ -378,7 +378,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.9.0";
+const APP_VERSION = "2.9.1";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -890,8 +890,13 @@ function buildCard(task, i) {
 }
 
 // 替えどき(目安)が近い順: 残り日数の少ない順。未記録は末尾。
+// まず「過ぎた → もうすぐ → まだ大丈夫 → 未記録」のまとまり順、その中で残り日数の少ない順
+const STATUS_RANK = { over: 0, soon: 1, ok: 2, none: 3 };
 function sortByDue(a, b) {
   const da = daysSince(lastDate(a)), db = daysSince(lastDate(b));
+  const ga = da === null ? 3 : STATUS_RANK[statusOf(a, da).status];
+  const gb = db === null ? 3 : STATUS_RANK[statusOf(b, db).status];
+  if (ga !== gb) return ga - gb;
   const ra = da === null ? Infinity : a.interval - da;
   const rb = db === null ? Infinity : b.interval - db;
   return ra - rb;
