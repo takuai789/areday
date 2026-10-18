@@ -41,7 +41,9 @@
   }
 
   /* ── コンパクト一覧（1項目1行） ── */
-  .tlist { display: flex; flex-direction: column; gap: 8px; }
+  .tlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; align-items: start; }
+  .tlist .grp { grid-column: 1 / -1; }
+  @media (min-width: 900px) { .tlist { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   .grp { font-size: 12px; font-weight: 700; letter-spacing: .08em; margin: 14px 4px 2px; display: flex; align-items: center; gap: 8px; opacity: .75; }
   .grp:first-child { margin-top: 4px; }
   .grp .n { font-size: 11px; background: rgba(42,37,33,.08); border-radius: 99px; padding: 0 8px; }
@@ -71,7 +73,8 @@
     font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
   .ti-done:active { transform: scale(.92); background: var(--accent); color: #fff; }
-  .ti-open { margin: 2px 0 6px; }
+  .ti-open { margin: 0; }
+  .ti-open .card { padding: 20px; }
   .ti-open .card { animation: none; }
   .ti-close { display: block; margin: 0 auto 4px; background: none; border: 0; font-family: inherit; font-size: 12.5px; color: var(--accent); opacity: .75; cursor: pointer; padding: 6px 12px; }
   .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); transform: translateX(-50%) translateY(150%); z-index: 60;
@@ -364,7 +367,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.7.0";
+const APP_VERSION = "2.8.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
