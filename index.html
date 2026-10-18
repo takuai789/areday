@@ -89,7 +89,29 @@
     box-shadow: inset 5px 0 0 var(--over), 0 8px 22px -12px rgba(192,57,43,.45);
     padding-left: 20px;
   }
-  .ti.over.over2 { background: linear-gradient(100deg, #f6c9c0 0%, #fde8e3 60%); border-color: var(--over); }
+  /* 過ぎ具合の3段階 */
+  .ti.over.lv1 { background: linear-gradient(100deg, #fdeee4 0%, #fff7f2 55%); border-color: rgba(214,110,60,.5); box-shadow: inset 5px 0 0 #e08a4f, 0 6px 18px -12px rgba(214,110,60,.4); }
+  .ti.over.lv1 .ti-name { color: #9a4a1c; }
+  .ti.over.lv1 .ti-num .l { background: #e08a4f; }
+  .ti.over.lv1 .ti-num .n, .ti.over.lv1 .ti-num .u { color: #c8662e; }
+  .ti.over.lv1 .ti-done { border-color: #e08a4f; color: #c8662e; }
+  .ti.over.lv3 { background: linear-gradient(100deg, #f3bfb4 0%, #fbe2dc 60%); border-color: var(--over); box-shadow: inset 7px 0 0 #a02a1c, 0 10px 26px -12px rgba(160,42,28,.55); }
+  .ti.over.lv3 .ti-num .l { background: #a02a1c; }
+  .tab { white-space: nowrap; }
+  @media (max-width: 520px) {
+    div.tabbar { gap: 14px; overflow-x: auto; scrollbar-width: none; }
+    .tabbar::-webkit-scrollbar { display: none; }
+    .tabbar .tab { font-size: 13px; padding: 10px 3px 12px; gap: 3px; letter-spacing: 0; }
+    .tabbar .tab-count { padding: 1px 5px; font-size: 10.5px; min-width: 0; }
+    .tabbar .tab-alert { padding: 1px 5px; font-size: 10.5px; margin-left: 0; }
+  }
+  .sev { display: flex; align-items: center; gap: 4px; margin-top: 7px; }
+  .sev i { width: 22px; height: 6px; border-radius: 3px; background: rgba(192,57,43,.15); }
+  .sev i.on { background: var(--over); }
+  .lv1 .sev i.on { background: #e08a4f; }
+  .lv3 .sev i.on { background: #a02a1c; }
+  .sev span { font-size: 11px; margin-left: 6px; opacity: .75; }
+  .sev b { font-size: 12px; }
   .ti.over .ti-name { color: #8f2418; }
   .ti.over .ti-num .l {
     display: table; margin-left: auto; background: var(--over); color: #fff; opacity: 1;
@@ -412,7 +434,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.10.0";
+const APP_VERSION = "2.11.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -930,6 +952,12 @@ function buildCard(task, i) {
 }
 
 // 替えどき(目安)が近い順: 残り日数の少ない順。未記録は末尾。
+// 過ぎ具合：目安に対してどれだけ過ぎたか（100日ごとの3日超過と、3日ごとの3日超過は別物）
+function overLevel(task, days) {
+  const ratio = days / task.interval;
+  const lv = ratio < 1.25 ? 1 : ratio < 2 ? 2 : 3;
+  return { lv, ratio, pct: Math.round(ratio * 100), label: ["", "少し過ぎ", "だいぶ過ぎ", "かなり過ぎ"][lv] };
+}
 // まず「過ぎた → もうすぐ → まだ大丈夫 → 未記録」のまとまり順、その中で残り日数の少ない順
 const STATUS_RANK = { over: 0, soon: 1, ok: 2, none: 3 };
 function sortByDue(a, b) {
@@ -937,6 +965,7 @@ function sortByDue(a, b) {
   const ga = da === null ? 3 : STATUS_RANK[statusOf(a, da).status];
   const gb = db === null ? 3 : STATUS_RANK[statusOf(b, db).status];
   if (ga !== gb) return ga - gb;
+  if (ga === 0) return (db / b.interval) - (da / a.interval); // 過ぎたものは、目安に対して過ぎている割合が大きい順
   const ra = da === null ? Infinity : a.interval - da;
   const rb = db === null ? Infinity : b.interval - db;
   return ra - rb;
@@ -1075,7 +1104,8 @@ function render() {
 
 function buildRow(task, days, status) {
   const row = document.createElement("div");
-  row.className = "ti " + (status === "over" ? "over" + (task.interval && days >= task.interval * 1.5 ? " over2" : "") : status === "soon" ? "soon" : "");
+  const ol = status === "over" && task.interval && days !== null ? overLevel(task, days) : null;
+  row.className = "ti " + (ol ? "over lv" + ol.lv : status === "soon" ? "soon" : "");
   const last = lastDate(task);
   let sub = last ? "最終 " + fmtShort(new Date(last + "T00:00:00")) : "まだ記録なし";
   if (task.interval) sub += " ・ 目安 " + task.interval + "日";
@@ -1085,6 +1115,8 @@ function buildRow(task, days, status) {
     const r = Math.min(days / task.interval, 1);
     const col = status === "over" ? "var(--over)" : status === "soon" ? "var(--warn)" : "var(--accent)";
     bar = '<div class="ti-bar"><i style="width:' + (r * 100) + '%;background:' + col + '"></i></div>';
+    if (ol) bar = '<div class="sev">' + [1, 2, 3].map(i => '<i class="' + (i <= ol.lv ? "on" : "") + '"></i>').join("") +
+      '<span>目安の <b>' + ol.pct + '%</b></span></div>';
   }
   let num;
   if (days === null) num = '<span class="ti-never">未記録</span>';
@@ -1092,7 +1124,7 @@ function buildRow(task, days, status) {
     const rest = task.interval - days;
     num = rest >= 0
       ? '<span class="l">あと</span><span class="n">' + rest + '</span><span class="u">日</span>'
-      : '<span class="l">超過</span><span class="n">' + (-rest) + '</span><span class="u">日</span>';
+      : '<span class="l">' + (ol ? ol.label : "超過") + '</span><span class="n">' + (-rest) + '</span><span class="u">日</span>';
   } else num = '<span class="l">' + (days === 0 ? "今日" : "") + '</span><span class="n">' + days + '</span><span class="u">日前</span>';
   row.innerHTML =
     '<div class="ti-main"><div class="ti-name"></div><div class="ti-sub"></div>' + bar + '</div>' +
