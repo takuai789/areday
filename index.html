@@ -105,6 +105,13 @@
     .tabbar .tab-count { padding: 1px 5px; font-size: 10.5px; min-width: 0; }
     .tabbar .tab-alert { padding: 1px 5px; font-size: 10.5px; margin-left: 0; }
   }
+  .fbar { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; flex-wrap: wrap; }
+  .fchip { font-family: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: rgba(255,253,250,.7); border: 1px solid rgba(42,37,33,.15); border-radius: 99px; padding: 6px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .fchip span { font-size: 11px; opacity: .6; }
+  .fchip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .fchip.on span { opacity: .9; }
+  .fhint { font-size: 11.5px; opacity: .5; }
+  .grp.g-due3 { color: #b57a1c; opacity: 1; }
   .sev { display: flex; align-items: center; gap: 4px; margin-top: 7px; }
   .sev i { width: 22px; height: 6px; border-radius: 3px; background: rgba(192,57,43,.15); }
   .sev i.on { background: var(--over); }
@@ -434,7 +441,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.11.0";
+const APP_VERSION = "2.12.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -442,6 +449,12 @@ let editIntervalFor = null;
 let editNameFor = null;
 let activeTab = "tracked"; // "tracked" or "simple"
 let openId = null; // 一覧で開いている項目（詳細カードを出す）
+// 「今やるもの」だけ表示（過ぎた＋3日以内）。この端末だけの表示設定
+const FOCUS_KEY = "elapsed_tracker_focus_v1";
+let focusMode = false;
+try { focusMode = localStorage.getItem(FOCUS_KEY) === "1"; } catch (e) {}
+function setFocus(v) { focusMode = v; try { localStorage.setItem(FOCUS_KEY, v ? "1" : "0"); } catch (e) {} openId = null; render(); }
+function restOf(t) { const d = daysSince(lastDate(t)); return d === null ? null : t.interval - d; }
 
 // ── 保存・読み込み ──
 function load() {
@@ -1042,10 +1055,28 @@ function render() {
     return;
   }
 
-  const list = activeTab === "tracked" ? tracked : simple;
+  const focusList = tracked.filter(t => { const r = restOf(t); return r !== null && r <= 3; })
+    .sort((a, b) => { const ra = restOf(a), rb = restOf(b);
+      if ((ra < 0) !== (rb < 0)) return ra < 0 ? -1 : 1;
+      return ra < 0 ? sortByDue(a, b) : ra - rb; });
+  const list = activeTab === "tracked" ? (focusMode ? focusList : tracked) : simple;
+  if (activeTab === "tracked" && tracked.length) {
+    const bar = document.createElement("div");
+    bar.className = "fbar";
+    bar.innerHTML = '<button class="fchip' + (focusMode ? '' : ' on') + '" data-f="0">すべて <span>' + tracked.length + '</span></button>' +
+      '<button class="fchip' + (focusMode ? ' on' : '') + '" data-f="1">今やるもの <span>' + focusList.length + '</span></button>' +
+      '<span class="fhint">過ぎたもの＋3日以内</span>';
+    bar.onclick = (e) => { const b = e.target.closest(".fchip"); if (b) setFocus(b.dataset.f === "1"); };
+    grid.appendChild(bar);
+  }
   const desc = activeTab === "tracked" ? "目安が近い順" : "ずっとやってない順";
 
-  if (list.length === 0) {
+  if (list.length === 0 && activeTab === "tracked" && focusMode && tracked.length) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.innerHTML = "いま替えどきのものはありません。<br>3日以内に来るものもなし。";
+    grid.appendChild(e);
+  } else if (list.length === 0) {
     const emptyMsg = activeTab === "tracked"
       ? "替えどきを管理するタスクはまだありません。<br>タスクに目安日数を設定すると、ここに表示されます。"
       : "記録だけのタスクはまだありません。";
@@ -1068,10 +1099,11 @@ function render() {
       const d = daysSince(lastDate(task));
       const { status } = statusOf(task, d);
       if (activeTab === "tracked") {
-        const g = d === null ? "never" : status;
+        const grpOf = (t) => { const dd = daysSince(lastDate(t)); if (dd === null) return "never"; const st = statusOf(t, dd).status; return focusMode ? (st === "over" ? "over" : "due3") : st; };
+        const g = grpOf(task);
         if (g !== lastGrp) {
-          const cnt = list.filter(t => { const dd = daysSince(lastDate(t)); return (dd === null ? "never" : statusOf(t, dd).status) === g; }).length;
-          const label = { over: "替えどきを過ぎた", soon: "もうすぐ", ok: "まだ大丈夫", never: "まだ記録なし" }[g];
+          const cnt = list.filter(t => grpOf(t) === g).length;
+          const label = { over: "替えどきを過ぎた", soon: "もうすぐ", ok: "まだ大丈夫", never: "まだ記録なし", due3: "3日以内" }[g];
           const h = document.createElement("div");
           h.className = "grp g-" + g; h.innerHTML = label + ' <span class="n">' + cnt + '</span>';
           sub.appendChild(h); lastGrp = g;
