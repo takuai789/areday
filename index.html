@@ -431,8 +431,8 @@
     <div class="grid" id="grid"></div>
     <div class="add-area" id="addArea"></div>
     <div class="sync-area">
-      <button class="sync-btn" onclick="exportData()">⇣ 書き出し</button>
-      <button class="sync-btn" onclick="pickImportFile()">⇡ 取り込み（同期）</button>
+      <button class="sync-btn" onclick="exportData()">⇣ データを書き出す（バックアップ）</button>
+      <button class="sync-btn" onclick="pickImportFile()">⇡ データを取り込む</button>
       <div class="sync-status" id="syncStatus"></div>
       <div class="sync-note">
         端末を切り替えるときは、使い終わりに「書き出し」、使い始めに「取り込み」<br>
@@ -444,7 +444,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.13.2";
+const APP_VERSION = "2.14.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
