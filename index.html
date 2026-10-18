@@ -103,6 +103,12 @@
   .ti.over .ti-done:hover { background: var(--over); color: #fff; }
   .grp.g-over::before { content: "⚠"; font-size: 13px; }
   .grp.g-over { font-size: 13px; }
+  /* ── 見出しをコンパクトに（v2.9.3） ── */
+  header.top { display: flex; align-items: baseline; gap: 14px; text-align: left; margin: 0 0 14px; flex-wrap: wrap; }
+  header.top h1 { font-size: 24px; margin: 0; letter-spacing: .01em; }
+  header.top .kicker { margin: 0; font-size: 11px; letter-spacing: .25em; opacity: .8; }
+  body { padding-top: calc(env(safe-area-inset-top) + 18px); }
+  @media (max-width: 520px) { header.top h1 { font-size: 21px; } body { padding-top: calc(env(safe-area-inset-top) + 14px); } }
   .dlg-title { font-size: 15px; font-weight: 700; margin: 2px 0 12px; }
   .dlg-input { width: 100%; font-family: inherit; font-size: 15px; color: var(--ink); background: rgba(42,37,33,.04); border: 1px solid rgba(194,104,62,.3); border-radius: 12px; padding: 10px 12px; outline: none; resize: vertical; margin-bottom: 16px; line-height: 1.6; }
   .dlg-input:focus { border-color: var(--accent); }
@@ -378,10 +384,9 @@
 </head>
 <body>
   <div class="shell">
-    <header>
-      <div class="kicker">LAST DONE &nbsp;·&nbsp; <span id="versionBadge"></span></div>
+    <header class="top">
       <h1>あれから、何日。</h1>
-      <p class="sub">不定期にやることの「最後にやった日」を記録して、今日までの経過日数を数えます。</p>
+      <div class="kicker">LAST DONE &nbsp;·&nbsp; <span id="versionBadge"></span></div>
     </header>
     <div class="grid" id="grid"></div>
     <div class="add-area" id="addArea"></div>
@@ -394,12 +399,12 @@
         変更は項目ごとに賢く統合されます（同じ項目を両端でいじった場合は新しい方を採用）
       </div>
     </div>
-    <div class="footer-note">データはこの端末の中だけに保存されます（iPhoneとMacは別々。移すときは書き出し→取り込み）</div>
+    <div class="footer-note">不定期にやることの「最後にやった日」を記録して、今日までの経過日数を数えます。<br>データはこの端末の中だけに保存されます（iPhoneとMacは別々。移すときは書き出し→取り込み）</div>
     <div class="footer-note" id="versionLine" style="margin-top:8px"></div>
   </div>
 
 <script>
-const APP_VERSION = "2.9.2";
+const APP_VERSION = "2.9.3";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -981,10 +986,12 @@ function render() {
     e.innerHTML = emptyMsg;
     grid.appendChild(e);
   } else {
-    const note = document.createElement("div");
-    note.className = "sort-note";
-    note.textContent = desc;
-    grid.appendChild(note);
+    if (activeTab !== "tracked") {
+      const note = document.createElement("div");
+      note.className = "sort-note";
+      note.textContent = desc;
+      grid.appendChild(note);
+    }
 
     const sub = document.createElement("div");
     sub.className = "tlist";
