@@ -5,14 +5,14 @@
 // - アイコン等の静的アセットはキャッシュ優先（速さ重視）
 // CACHE の数字を上げるたびに「新しいバージョン」として検知される。
 // リリース時は index.html の APP_VERSION と必ずセットで上げること。
-const CACHE = 'areday-v2-14-0';
+const CACHE = 'areday-v2-15-0';
 const ASSETS = [
   './',
   './index.html',
   './guide.html',
   './manifest.webmanifest',
-  './icon-192.png',
-  './icon-512.png',
+  './icon-v2-192.png',
+  './icon-v2-512.png',
 ];
 
 self.addEventListener('install', (e) => {
