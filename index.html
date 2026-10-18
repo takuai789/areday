@@ -109,6 +109,14 @@
   header.top .kicker { margin: 0; font-size: 11px; letter-spacing: .25em; opacity: .8; }
   body { padding-top: calc(env(safe-area-inset-top) + 18px); }
   @media (max-width: 520px) { header.top h1 { font-size: 21px; } body { padding-top: calc(env(safe-area-inset-top) + 14px); } }
+  /* ── やめた習慣 ── */
+  .ti.stopped { background: rgba(255,253,250,.6); border-style: dashed; box-shadow: none; }
+  .ti.stopped .ti-name { opacity: .75; }
+  .ti-why { font-size: 12px; margin-top: 4px; color: var(--accent); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ti-resume { flex-shrink: 0; background: transparent; color: var(--accent); border: 1.5px solid rgba(194,104,62,.45); border-radius: 99px; font-family: inherit; font-size: 13px; font-weight: 700; padding: 7px 14px; cursor: pointer; }
+  .ti-resume:hover { background: var(--accent); color: #fff; }
+  .stop-btn { flex-shrink: 0; background: transparent; border: 1px solid rgba(42,37,33,.18); color: var(--ink); opacity: .6; border-radius: 99px; font-family: inherit; font-size: 11.5px; font-weight: 700; padding: 3px 10px; margin-right: 4px; cursor: pointer; }
+  .stop-btn:hover { opacity: 1; border-color: var(--accent); color: var(--accent); }
   .dlg-title { font-size: 15px; font-weight: 700; margin: 2px 0 12px; }
   .dlg-input { width: 100%; font-family: inherit; font-size: 15px; color: var(--ink); background: rgba(42,37,33,.04); border: 1px solid rgba(194,104,62,.3); border-radius: 12px; padding: 10px 12px; outline: none; resize: vertical; margin-bottom: 16px; line-height: 1.6; }
   .dlg-input:focus { border-color: var(--accent); }
@@ -404,7 +412,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.9.3";
+const APP_VERSION = "2.10.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -746,6 +754,9 @@ function mergeAndApply(incoming) {
       dates,
       notes,
       deleted: winner.deleted === true,
+      archived: winner.archived === true,
+      archivedAt: winner.archivedAt || "",
+      stopNote: winner.stopNote || "",
       updatedAt: Math.max(cur.updatedAt || 0, imp.updatedAt || 0),
     };
 
@@ -755,6 +766,8 @@ function mergeAndApply(incoming) {
       (cur.interval ?? null) === (merged.interval ?? null) &&
       (cur.memo || "") === merged.memo &&
       cur.deleted === merged.deleted &&
+      (cur.archived === true) === merged.archived &&
+      (cur.stopNote || "") === merged.stopNote &&
       JSON.stringify(cur.dates || []) === JSON.stringify(merged.dates) &&
       JSON.stringify(cur.notes || {}) === JSON.stringify(merged.notes);
     if (samePayload) same++;
@@ -899,6 +912,7 @@ function buildCard(task, i) {
 
     card.innerHTML =
       '<div class="card-top">' + nameHtml +
+        '<button class="stop-btn" title="やめた習慣に移す" onclick="stopTask('+task.id+')">やめる</button>' +
         '<button class="icon-btn" title="削除" onclick="removeTask('+task.id+')">🗑</button></div>' +
       displayHtml + intervalLinkHtml + editHtml + avgHtml +
       '<div class="actions">' +
@@ -947,8 +961,10 @@ function render() {
     return;
   }
 
-  const tracked = visible.filter(t => t.interval).sort(sortByDue);
-  const simple = visible.filter(t => !t.interval).sort(sortByElapsed);
+  const active = visible.filter(t => !t.archived);
+  const tracked = active.filter(t => t.interval).sort(sortByDue);
+  const simple = active.filter(t => !t.interval).sort(sortByElapsed);
+  const stopped = visible.filter(t => t.archived).sort((a, b) => String(b.archivedAt || "").localeCompare(String(a.archivedAt || "")));
 
   // タブバー
   const tabbar = document.createElement("div");
@@ -971,8 +987,31 @@ function render() {
     '<button class="tab'+(activeTab==="tracked"?" active":"")+'" onclick="switchTab(\'tracked\')">' +
       '替えどき管理 <span class="tab-count">'+tracked.length+'</span>'+alertBadge+'</button>' +
     '<button class="tab'+(activeTab==="simple"?" active":"")+'" onclick="switchTab(\'simple\')">' +
-      '記録だけ <span class="tab-count">'+simple.length+'</span></button>';
+      '記録だけ <span class="tab-count">'+simple.length+'</span></button>' +
+    '<button class="tab'+(activeTab==="stopped"?" active":"")+'" onclick="switchTab(\'stopped\')">' +
+      'やめた <span class="tab-count">'+stopped.length+'</span></button>';
   grid.appendChild(tabbar);
+
+  // やめた習慣：ログとして眺める・再開する
+  if (activeTab === "stopped") {
+    if (!stopped.length) {
+      const e = document.createElement("div");
+      e.className = "empty";
+      e.innerHTML = "やめた習慣はまだありません。<br>項目を開いて「やめる」を押すと、記録を残したままここに移ります。";
+      grid.appendChild(e);
+    } else {
+      const note = document.createElement("div");
+      note.className = "sort-note";
+      note.textContent = "やめた順（新しい順）・行をタップで記録を見る";
+      grid.appendChild(note);
+      const sub = document.createElement("div");
+      sub.className = "tlist";
+      stopped.forEach(t => sub.appendChild(buildStoppedRow(t)));
+      grid.appendChild(sub);
+    }
+    renderAddArea();
+    return;
+  }
 
   const list = activeTab === "tracked" ? tracked : simple;
   const desc = activeTab === "tracked" ? "目安が近い順" : "ずっとやってない順";
@@ -1091,6 +1130,49 @@ function quickDone(id) {
   }, () => editNote(id, today));
 }
 
+function buildStoppedRow(task) {
+  const row = document.createElement("div");
+  row.className = "ti stopped";
+  const ds = [...task.dates].sort();
+  const parts = [];
+  if (task.archivedAt) parts.push("やめた日 " + fmtShort(new Date(task.archivedAt + "T00:00:00")));
+  if (ds.length) parts.push("記録 " + ds.length + "回");
+  const av = avgInterval(task);
+  if (av) parts.push("平均 " + av.avg + "日ごと");
+  else if (task.interval) parts.push("目安 " + task.interval + "日");
+  row.innerHTML = '<div class="ti-main"><div class="ti-name"></div><div class="ti-sub"></div>' + (task.stopNote ? '<div class="ti-why"></div>' : '') + '</div>' +
+    '<button class="ti-resume">再開する</button>';
+  row.querySelector(".ti-name").textContent = task.name;
+  row.querySelector(".ti-sub").textContent = parts.join(" ・ ") || "記録なし";
+  if (task.stopNote) row.querySelector(".ti-why").textContent = "「" + task.stopNote + "」";
+  row.onclick = (e) => {
+    if (e.target.closest(".ti-resume")) { resumeTask(task.id); return; }
+    openHistory(task.id);
+  };
+  return row;
+}
+async function stopTask(id) {
+  const task = tasks.find(x => x.id === id);
+  if (!task) return;
+  const why = await askText("「" + task.name + "」をやめた習慣に移します", "", "やめた理由など（空でもOK）。記録はそのまま残り、いつでも再開できます");
+  if (why === null) return;
+  task.archived = true; task.archivedAt = todayStr(); task.stopNote = why.trim();
+  touch(task); save();
+  openId = null; render();
+  showToast("「" + task.name + "」をやめた習慣に移しました", () => {
+    task.archived = false; task.archivedAt = ""; task.stopNote = ""; touch(task); save(); render();
+  });
+}
+function resumeTask(id) {
+  const task = tasks.find(x => x.id === id);
+  if (!task) return;
+  task.archived = false; task.archivedAt = ""; task.stopNote = "";
+  touch(task); save();
+  activeTab = task.interval ? "tracked" : "simple";
+  openId = task.id; render();
+  showToast("「" + task.name + "」を再開しました");
+}
+
 function switchTab(tab) {
   activeTab = tab;
   openId = null;
@@ -1156,6 +1238,7 @@ function openHistory(id) {
       '<div class="modal-head"><div><div class="kicker">HISTORY</div><div class="modal-title">'+esc(task.name)+'</div></div>' +
       '<button class="icon-btn" onclick="closeModal()">✕</button></div>' +
       '<div>'+rows+'</div>' +
+      (task.archived ? '<div class="last-note" style="margin:0 0 10px"><span>やめた日 '+(task.archivedAt ? fmtDate(task.archivedAt) : '')+'</span>'+esc(task.stopNote || '（理由のメモなし）')+'</div>' : '') +
       (av ? '<div class="avg-line" style="margin:0 0 6px">平均 <b>'+av.avg+'日</b>ごと<span class="avg-n">（'+av.n+'回）</span></div>' : '') +
       '<div class="cal-legend" style="margin-top:14px">最新'+MAX_HISTORY+'回分まで保存されます。✎ でその回のメモ</div>' +
     '</div>';
