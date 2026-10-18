@@ -82,6 +82,17 @@
     box-shadow: 0 10px 30px -10px rgba(0,0,0,.5); transition: transform .3s cubic-bezier(.32,.72,0,1); white-space: nowrap; }
   .toast.show { transform: translateX(-50%) translateY(0); }
   .toast button { background: rgba(255,255,255,.14); color: #ffd9c4; border: 0; border-radius: 10px; padding: 7px 12px; font-family: inherit; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .dlg-title { font-size: 15px; font-weight: 700; margin: 2px 0 12px; }
+  .dlg-input { width: 100%; font-family: inherit; font-size: 15px; color: var(--ink); background: rgba(42,37,33,.04); border: 1px solid rgba(194,104,62,.3); border-radius: 12px; padding: 10px 12px; outline: none; resize: vertical; margin-bottom: 16px; line-height: 1.6; }
+  .dlg-input:focus { border-color: var(--accent); }
+  .avg-line { font-size: 13px; margin: -4px 0 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+  .avg-line b { color: var(--accent); font-size: 15px; }
+  .avg-line .avg-n { font-size: 11.5px; opacity: .5; }
+  .avg-apply { background: rgba(194,104,62,.1); color: var(--accent); border: 1px solid rgba(194,104,62,.35); border-radius: 99px; font-family: inherit; font-size: 12px; font-weight: 700; padding: 4px 11px; cursor: pointer; }
+  .last-note { font-size: 13px; line-height: 1.6; background: rgba(42,37,33,.04); border-radius: 10px; padding: 8px 11px; margin: -4px 0 14px; word-break: break-word; }
+  .last-note span { display: block; font-size: 10.5px; font-weight: 700; opacity: .5; letter-spacing: .05em; }
+  .history-row .h-sub { font-size: 11.5px; opacity: .5; margin-top: 1px; }
+  .history-row .h-note { font-size: 12.5px; margin-top: 3px; color: var(--accent); word-break: break-word; }
   .dlg-msg { font-size: 15px; line-height: 1.8; white-space: pre-line; margin: 4px 0 20px; }
   .dlg-btns { display: flex; gap: 10px; justify-content: flex-end; }
   #updateBanner{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 16px);z-index:1000;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--accent);color:#fff;border:0;border-radius:14px;padding:14px 18px;font-family:inherit;font-size:14px;font-weight:700;box-shadow:0 8px 28px rgba(120,60,30,.35);cursor:pointer;transform:translateY(140%);transition:transform .35s cubic-bezier(.32,.72,0,1)}
@@ -367,7 +378,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.8.0";
+const APP_VERSION = "2.9.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -414,6 +425,22 @@ function dialog(msg, okLabel, cancelLabel) {
   });
 }
 const askConfirm = (msg, ok) => dialog(msg, ok || "OK", "キャンセル");
+function askText(title, value, placeholder) {
+  return new Promise((resolve) => {
+    closeModal();
+    const root = document.createElement("div");
+    root.id = "modalRoot"; root.className = "overlay";
+    root.innerHTML = '<div class="modal"><div class="dlg-title"></div><textarea class="dlg-input" rows="3"></textarea>' +
+      '<div class="dlg-btns"><button class="ghost" data-a="0">キャンセル</button><button class="primary" data-a="1">保存</button></div></div>';
+    root.querySelector(".dlg-title").textContent = title;
+    const ta = root.querySelector(".dlg-input"); ta.value = value || ""; ta.placeholder = placeholder || "";
+    const done = (ok) => { root.remove(); resolve(ok ? ta.value : null); };
+    root.onclick = (e) => { const b = e.target.closest("[data-a]"); if (b) done(b.dataset.a === "1"); else if (e.target === root) done(false); };
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) done(true); if (e.key === "Escape") done(false); });
+    document.body.appendChild(root);
+    setTimeout(() => ta.focus(), 50);
+  });
+}
 const notify = (msg) => dialog(msg, "OK");
 
 // ── 日付ユーティリティ ──
@@ -469,7 +496,7 @@ async function removeTask(id) {
   if (task) { task.deleted = true; touch(task); save(); }
   render();
 }
-const MAX_HISTORY = 5; // 履歴は最新この件数まで保持
+const MAX_HISTORY = 20; // 履歴は最新この件数まで保持（v2.9.0 で 5→20）
 
 function pushDate(task, dateStr) {
   if (!task || task.dates.includes(dateStr)) return;
@@ -478,20 +505,60 @@ function pushDate(task, dateStr) {
   if (task.dates.length > MAX_HISTORY) {
     task.dates = task.dates.slice(task.dates.length - MAX_HISTORY);
   }
+  pruneNotes(task);
   touch(task);
   save();
+}
+// 消えた日付のメモは捨てる
+function pruneNotes(task) {
+  if (!task.notes) return;
+  for (const k of Object.keys(task.notes)) if (!task.dates.includes(k) || !task.notes[k]) delete task.notes[k];
+}
+function noteOf(task, d) { return (task.notes && task.notes[d]) || ""; }
+async function editNote(id, d, reopen) {
+  const task = tasks.find(x => x.id === id);
+  if (!task) return;
+  const v = await askText(task.name + "　" + fmtDate(d), noteOf(task, d), "例：○○美容室・カットとカラー／今回は左だけ交換");
+  if (v === null) { if (reopen) openHistory(id); return; }
+  task.notes = Object.assign({}, task.notes || {});
+  if (v.trim()) task.notes[d] = v.trim(); else delete task.notes[d];
+  touch(task); save(); render();
+  if (reopen) openHistory(id); else showToast("メモを残しました");
+}
+// 1. 履歴から平均の間隔
+function avgInterval(task) {
+  const ds = [...task.dates].sort();
+  if (ds.length < 3) return null;
+  const t = ds.map(d => new Date(d + "T00:00:00").getTime());
+  let sum = 0;
+  for (let i = 1; i < t.length; i++) sum += (t[i] - t[i-1]) / 86400000;
+  return { avg: Math.max(1, Math.round(sum / (t.length - 1))), n: ds.length };
+}
+function avgNeedsUpdate(task, a) {
+  if (!a) return false;
+  if (!task.interval) return true;
+  return Math.abs(a.avg - task.interval) >= Math.max(3, task.interval * 0.15);
+}
+function applyAvg(id) {
+  const task = tasks.find(x => x.id === id);
+  const a = task && avgInterval(task);
+  if (!a) return;
+  saveInterval(id, a.avg);
+  showToast("目安を " + a.avg + "日 にしました");
 }
 function markToday(id) {
   pushDate(tasks.find(x => x.id === id), todayStr());
   render();
 }
 function markDate(id, dateStr) {
-  pushDate(tasks.find(x => x.id === id), dateStr);
+  const task = tasks.find(x => x.id === id);
+  pushDate(task, dateStr);
   closeModal(); render();
+  if (task) showToast(fmtShort(new Date(dateStr + "T00:00:00")) + " を記録", null, () => editNote(id, dateStr));
 }
 function removeDate(id, date) {
   const task = tasks.find(x => x.id === id);
-  if (task) { task.dates = task.dates.filter(d => d !== date); touch(task); save(); }
+  if (task) { task.dates = task.dates.filter(d => d !== date); pruneNotes(task); touch(task); save(); }
   render();
   openHistory(id);
 }
@@ -642,12 +709,16 @@ function mergeAndApply(incoming) {
 
     // updatedAt の新しい方を採用（属性とdeletedの判定）
     const winner = (imp.updatedAt || 0) >= (cur.updatedAt || 0) ? imp : cur;
+    const loser = winner === imp ? cur : imp;
+    const notes = Object.assign({}, loser.notes || {}, winner.notes || {});
+    for (const k of Object.keys(notes)) if (!dates.includes(k) || !notes[k]) delete notes[k];
     const merged = {
       id: cur.id,
       name: winner.name,
       interval: winner.interval ?? null,
       memo: winner.memo || "",
       dates,
+      notes,
       deleted: winner.deleted === true,
       updatedAt: Math.max(cur.updatedAt || 0, imp.updatedAt || 0),
     };
@@ -658,7 +729,8 @@ function mergeAndApply(incoming) {
       (cur.interval ?? null) === (merged.interval ?? null) &&
       (cur.memo || "") === merged.memo &&
       cur.deleted === merged.deleted &&
-      JSON.stringify(cur.dates || []) === JSON.stringify(merged.dates);
+      JSON.stringify(cur.dates || []) === JSON.stringify(merged.dates) &&
+      JSON.stringify(cur.notes || {}) === JSON.stringify(merged.notes);
     if (samePayload) same++;
     else if (!cur.deleted && merged.deleted) deletedSynced++;
     else updated++;
@@ -769,6 +841,14 @@ function buildCard(task, i) {
       intervalLinkHtml = '<button class="set-interval-link" onclick="startEditInterval('+task.id+')">+ 交換／実施の目安日数を設定</button>';
     }
 
+    const av = avgInterval(task);
+    let avgHtml = "";
+    if (av) {
+      avgHtml = '<div class="avg-line">いつもは平均 <b>' + av.avg + '日</b>ごと<span class="avg-n">（' + av.n + '回の記録から）</span>' +
+        (avgNeedsUpdate(task, av) ? '<button class="avg-apply" onclick="applyAvg(' + task.id + ')">目安を' + av.avg + '日にする</button>' : '') + '</div>';
+    }
+    const lastNote = last ? noteOf(task, last) : "";
+    if (lastNote) avgHtml += '<div class="last-note"><span>前回のメモ</span>' + esc(lastNote) + '</div>';
     let editHtml = "";
     if (editIntervalFor === task.id) {
       editHtml =
@@ -794,9 +874,9 @@ function buildCard(task, i) {
     card.innerHTML =
       '<div class="card-top">' + nameHtml +
         '<button class="icon-btn" title="削除" onclick="removeTask('+task.id+')">🗑</button></div>' +
-      displayHtml + intervalLinkHtml + editHtml +
+      displayHtml + intervalLinkHtml + editHtml + avgHtml +
       '<div class="actions">' +
-        '<button class="primary" onclick="markToday('+task.id+')">✓ 今日やった！</button>' +
+        '<button class="primary" onclick="quickDone('+task.id+')">✓ 今日やった！</button>' +
         '<button class="ghost" onclick="openPicker('+task.id+')">📅 日付を選ぶ</button>' +
         historyBtn +
       '</div>' +
@@ -955,15 +1035,16 @@ function buildRow(task, days, status) {
   return row;
 }
 let toastTimer = null;
-function showToast(msg, undoFn) {
+function showToast(msg, undoFn, noteFn) {
   let t = document.getElementById("toast");
   if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast"; document.body.appendChild(t); }
-  t.innerHTML = '<span></span>' + (undoFn ? '<button>取り消す</button>' : '');
+  t.innerHTML = '<span></span>' + (noteFn ? '<button data-k="note">✎ メモ</button>' : '') + (undoFn ? '<button data-k="undo">取り消す</button>' : '');
   t.querySelector("span").textContent = msg;
-  if (undoFn) t.querySelector("button").onclick = () => { undoFn(); t.classList.remove("show"); };
+  if (undoFn) t.querySelector('[data-k="undo"]').onclick = () => { undoFn(); t.classList.remove("show"); };
+  if (noteFn) t.querySelector('[data-k="note"]').onclick = () => { t.classList.remove("show"); noteFn(); };
   requestAnimationFrame(() => t.classList.add("show"));
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 4500);
+  toastTimer = setTimeout(() => t.classList.remove("show"), noteFn ? 6000 : 4500);
 }
 function quickDone(id) {
   const task = tasks.find(x => x.id === id);
@@ -971,9 +1052,10 @@ function quickDone(id) {
   if (task.dates.includes(todayStr())) { showToast("今日はもう記録済みです"); return; }
   const before = { dates: [...task.dates], updatedAt: task.updatedAt };
   markToday(id);
-  showToast("「" + task.name + "」今日やった、を記録", () => {
-    task.dates = before.dates; touch(task); save(); render();
-  });
+  const today = todayStr();
+  showToast("「" + task.name + "」を記録", () => {
+    task.dates = before.dates; pruneNotes(task); touch(task); save(); render();
+  }, () => editNote(id, today));
 }
 
 function switchTab(tab) {
@@ -1021,11 +1103,18 @@ function openHistory(id) {
   closeModal();
   const task = tasks.find(t => t.id === id);
   if (!task) return;
-  const rows = [...task.dates].reverse().map(d =>
-    '<div class="history-row">🕘 <span style="flex:1">'+fmtDate(d)+'</span>' +
-    '<span class="ago-tag">'+daysSince(d)+'日前</span>' +
-    '<button class="icon-btn" style="color:var(--accent);opacity:.6" onclick="removeDate('+id+',\''+d+'\')">🗑</button></div>'
-  ).join("");
+  const asc = [...task.dates].sort();
+  const rows = asc.map((d, i) => {
+    const gap = i > 0 ? Math.round((new Date(d + "T00:00:00") - new Date(asc[i-1] + "T00:00:00")) / 86400000) : null;
+    const note = noteOf(task, d);
+    return '<div class="history-row"><div style="flex:1;min-width:0"><div>'+fmtDate(d)+'</div>' +
+      '<div class="h-sub">'+(gap !== null ? '前回から '+gap+'日' : 'はじめての記録')+'</div>' +
+      (note ? '<div class="h-note">'+esc(note)+'</div>' : '') + '</div>' +
+      '<span class="ago-tag">'+daysSince(d)+'日前</span>' +
+      '<button class="icon-btn" title="メモ" style="color:var(--accent);opacity:.75;font-size:16px" onclick="editNote('+id+',\''+d+'\',true)">✎</button>' +
+      '<button class="icon-btn" title="削除" style="color:var(--accent);opacity:.6" onclick="removeDate('+id+',\''+d+'\')">🗑</button></div>';
+  }).reverse().join("");
+  const av = avgInterval(task);
   const root = document.createElement("div");
   root.id = "modalRoot"; root.className = "overlay";
   root.onclick = (e) => { if (e.target === root) closeModal(); };
@@ -1034,7 +1123,8 @@ function openHistory(id) {
       '<div class="modal-head"><div><div class="kicker">HISTORY</div><div class="modal-title">'+esc(task.name)+'</div></div>' +
       '<button class="icon-btn" onclick="closeModal()">✕</button></div>' +
       '<div>'+rows+'</div>' +
-      '<div class="cal-legend" style="margin-top:14px">最新'+MAX_HISTORY+'回分だけ自動で保存されます</div>' +
+      (av ? '<div class="avg-line" style="margin:0 0 6px">平均 <b>'+av.avg+'日</b>ごと<span class="avg-n">（'+av.n+'回）</span></div>' : '') +
+      '<div class="cal-legend" style="margin-top:14px">最新'+MAX_HISTORY+'回分まで保存されます。✎ でその回のメモ</div>' +
     '</div>';
   document.body.appendChild(root);
 }
