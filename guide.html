@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#ece2d6" />
+<title>あれから、何日。の使い道</title>
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --accent:#c2683e; --ink:#2a2521; --warn:#d99520; --over:#c0392b; --card:rgba(255,253,250,.88); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: #e3d6c5; }
+  body {
+    margin: 0; color: var(--ink);
+    font-family: 'Zen Maru Gothic', 'Hiragino Sans', sans-serif;
+    background: radial-gradient(120% 70% at 50% -10%, #f4ece3 0%, #ece2d6 45%, #e3d6c5 100%);
+    background-attachment: fixed; line-height: 1.8;
+    padding: calc(env(safe-area-inset-top) + 18px) 20px calc(env(safe-area-inset-bottom) + 60px);
+  }
+  .shell { max-width: 880px; margin: 0 auto; }
+  .back { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); text-decoration: none; font-weight: 700; font-size: 14px; padding: 6px 0; }
+  .kicker { font-family: 'Cormorant Garamond', serif; letter-spacing: .3em; font-size: 12px; color: var(--accent); font-weight: 700; margin-top: 18px; }
+  h1 { font-size: 30px; margin: 4px 0 10px; line-height: 1.35; }
+  .lead { font-size: 15.5px; opacity: .8; margin: 0 0 8px; }
+  h2 { font-size: 20px; margin: 44px 0 6px; display: flex; align-items: baseline; gap: 10px; }
+  h2 .no { font-family: 'Cormorant Garamond', serif; font-size: 30px; color: var(--accent); line-height: 1; }
+  .sec-lead { font-size: 14px; opacity: .7; margin: 0 0 14px; }
+  .card { background: var(--card); border: 1px solid rgba(194,104,62,.14); border-radius: 18px; padding: 18px 20px; box-shadow: 0 10px 30px -22px rgba(80,50,30,.5); }
+  .fits { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px,100%), 1fr)); gap: 12px; }
+  .fit b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .fit p { margin: 0; font-size: 13.5px; opacity: .75; line-height: 1.7; }
+  .fit .ic { font-size: 22px; }
+
+  .cat { margin-top: 26px; }
+  .cat h3 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .cat .why { font-size: 13px; opacity: .65; margin: 0 0 10px; }
+  .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px,100%), 1fr)); gap: 8px; }
+  .item { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid rgba(194,104,62,.12); border-radius: 14px; padding: 10px 10px 10px 14px; }
+  .item .t { flex: 1; min-width: 0; }
+  .item .n { font-weight: 700; font-size: 14.5px; line-height: 1.4; }
+  .item .s { font-size: 11.5px; opacity: .6; line-height: 1.5; }
+  .item .iv { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 700; color: var(--accent); white-space: nowrap; line-height: 1; }
+  .item .iv small { font-family: 'Zen Maru Gothic', sans-serif; font-size: 10.5px; font-weight: 700; margin-left: 1px; color: var(--ink); opacity: .7; }
+  .item .iv.none { font-family: 'Zen Maru Gothic', sans-serif; font-size: 11px; color: var(--ink); opacity: .5; }
+  .add { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid rgba(194,104,62,.45); background: transparent; color: var(--accent); font-size: 18px; font-weight: 700; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; }
+  .add:hover { background: var(--accent); color: #fff; }
+  .add.done { background: rgba(194,104,62,.12); border-color: transparent; font-size: 14px; cursor: default; }
+
+  /* 画面の見方 */
+  .demo { display: grid; gap: 8px; }
+  .row { display: flex; align-items: center; gap: 12px; border-radius: 14px; padding: 10px 12px 10px 16px; background: var(--card); border: 1px solid rgba(194,104,62,.12); }
+  .row .t { flex: 1; min-width: 0; }
+  .row .n { font-weight: 700; font-size: 15px; }
+  .row .s { font-size: 11.5px; opacity: .6; }
+  .row .num { text-align: right; line-height: 1; white-space: nowrap; }
+  .row .num .l { display: table; margin: 0 0 4px auto; font-size: 10.5px; font-weight: 700; opacity: .6; }
+  .row .num .v { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700; color: var(--accent); }
+  .row .num .u { font-size: 11px; font-weight: 700; }
+  .row.over { background: linear-gradient(100deg,#fbe0da,#fff3f0 55%); border: 1.5px solid rgba(192,57,43,.55); box-shadow: inset 5px 0 0 var(--over); }
+  .row.over .num .l { background: var(--over); color: #fff; opacity: 1; border-radius: 99px; padding: 2px 8px; }
+  .row.over .num .v { color: var(--over); }
+  .row.lv1 { background: linear-gradient(100deg,#fdeee4,#fff7f2 55%); border-color: rgba(214,110,60,.5); box-shadow: inset 5px 0 0 #e08a4f; }
+  .row.lv1 .num .l { background: #e08a4f; } .row.lv1 .num .v { color: #c8662e; }
+  .row.soon { background: rgba(255,250,240,.92); border-color: rgba(217,149,32,.45); }
+  .row.soon .num .v { color: #c27a1e; }
+  .note { font-size: 13px; opacity: .75; margin: 10px 2px 0; }
+
+  .tips { display: grid; gap: 10px; }
+  .tip { display: flex; gap: 12px; align-items: flex-start; }
+  .tip .ic { font-size: 20px; line-height: 1.5; width: 26px; text-align: center; flex-shrink: 0; }
+  .tip b { display: block; font-size: 15px; }
+  .tip p { margin: 0; font-size: 13.5px; opacity: .75; }
+
+  .not { display: grid; gap: 8px; }
+  .not div { font-size: 14px; }
+  .not span { opacity: .6; font-size: 13px; }
+
+  .cta { display: block; text-align: center; margin: 40px auto 0; max-width: 360px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; border-radius: 14px; padding: 14px; font-size: 15px; box-shadow: 0 10px 24px -12px rgba(194,104,62,.7); }
+  .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); transform: translateX(-50%) translateY(150%); background: #2a2521; color: #fffaf3; border-radius: 14px; padding: 11px 18px; font-size: 14px; transition: transform .3s cubic-bezier(.32,.72,0,1); white-space: nowrap; z-index: 10; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  @media (max-width: 520px) { h1 { font-size: 25px; } h2 { font-size: 18px; } body { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <a class="back" href="./">← アプリに戻る</a>
+  <div class="kicker">GUIDE</div>
+  <h1>あれから、何日。の使い道</h1>
+  <p class="lead">毎日でも、決まった日でもない。でも放っておくと困ることの「最後にやった日」を覚えておくアプリです。<br>「あれ、前に替えたのいつだっけ？」を、二度と考えなくてよくなります。</p>
+
+  <h2><span class="no">1</span>向いているもの</h2>
+  <p class="sec-lead">3つの条件のどれかに当てはまるものが向いています。</p>
+  <div class="card fits">
+    <div class="fit"><span class="ic">🔁</span><b>不定期にくり返す</b><p>毎日・毎週ほど決まっていないけれど、いつかまたやるもの。</p></div>
+    <div class="fit"><span class="ic">🤔</span><b>前回を忘れがち</b><p>間が空くので「いつやったっけ」と思い出せなくなるもの。</p></div>
+    <div class="fit"><span class="ic">⏳</span><b>放っておくと困る</b><p>替えどきを過ぎると、衛生・健康・性能に響くもの。</p></div>
+  </div>
+
+  <h2><span class="no">2</span>こんなアイテムで使えます</h2>
+  <p class="sec-lead">右の数字は目安の日数の一例です。＋ でそのままアプリに追加できます（目安はあとで変えられます）。</p>
+  <div id="cats"></div>
+
+  <h2><span class="no">3</span>画面の見方</h2>
+  <p class="sec-lead">替えどき管理のタブは、状態ごとにまとまって並びます。</p>
+  <div class="demo">
+    <div class="row over"><div class="t"><div class="n">水切りネット</div><div class="s">目安 3日 ・ 目安の 200%</div></div><div class="num"><span class="l">かなり過ぎ</span><span class="v">3</span><span class="u">日</span></div></div>
+    <div class="row over lv1"><div class="t"><div class="n">浄水器カートリッジ</div><div class="s">目安 100日 ・ 目安の 103%</div></div><div class="num"><span class="l">少し過ぎ</span><span class="v">3</span><span class="u">日</span></div></div>
+    <div class="row soon"><div class="t"><div class="n">布団掃除</div><div class="s">目安 30日</div></div><div class="num"><span class="l">あと</span><span class="v">5</span><span class="u">日</span></div></div>
+    <div class="row"><div class="t"><div class="n">歯ブラシ交換</div><div class="s">目安 30日</div></div><div class="num"><span class="l">あと</span><span class="v">24</span><span class="u">日</span></div></div>
+  </div>
+  <p class="note">同じ「3日超過」でも、3日ごとのものと100日ごとのものでは重みが違います。過ぎたものは「目安に対してどれだけ過ぎたか」で、少し過ぎ／だいぶ過ぎ／かなり過ぎ の3段階で表示します。</p>
+
+  <h2><span class="no">4</span>上手に使うコツ</h2>
+  <div class="card tips">
+    <div class="tip"><span class="ic">✓</span><div><b>やったらその場で ✓</b><p>行の右の ✓ で「今日やった」。押し間違えても下のメッセージから取り消せます。</p></div></div>
+    <div class="tip"><span class="ic">✎</span><div><b>その回のメモを残す</b><p>記録したときに「✎ メモ」で一言。お店の名前、型番、費用など、次回の自分が助かることを。</p></div></div>
+    <div class="tip"><span class="ic">📊</span><div><b>目安は実績に合わせる</b><p>3回記録すると「いつもは平均○日ごと」が出ます。目安とずれていたら、ワンタップで合わせられます。</p></div></div>
+    <div class="tip"><span class="ic">🎯</span><div><b>「今やるもの」で絞る</b><p>過ぎたもの＋3日以内のものだけ表示。週末の家事前にさっと確認するのに便利です。</p></div></div>
+    <div class="tip"><span class="ic">📝</span><div><b>目安がないものは「記録だけ」へ</b><p>目安を決めずに登録すると「ずっとやってない順」に並びます。ご無沙汰を思い出す用に。</p></div></div>
+    <div class="tip"><span class="ic">⏸</span><div><b>やめたら「やめる」</b><p>消さずに「やめた」タブへ。記録は残るので、いつでも「再開する」で戻せます。</p></div></div>
+    <div class="tip"><span class="ic">💾</span><div><b>月に1回は書き出し</b><p>データはこの端末の中だけ。いちばん下の「書き出し」で iCloud Drive の「アプリのバックアップ」に保存しておくと安心です。</p></div></div>
+  </div>
+
+  <h2><span class="no">5</span>向いていないもの</h2>
+  <div class="card not">
+    <div>毎日・毎週決まってやること　<span>→ ルーティンのアプリ（AURORA）向き</span></div>
+    <div>日付が決まっている予定（○月○日の予約など）　<span>→ カレンダー向き</span></div>
+    <div>回数や量を細かく記録したいもの　<span>→ 専用の記録アプリ向き</span></div>
+  </div>
+
+  <a class="cta" href="./">アプリに戻る</a>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+  // 例のアイテム（目安の日数はあくまで一例）
+  const CATS = [
+    { ic: "🪥", name: "消耗品の交換", why: "替えどきを過ぎると衛生面や性能が落ちるもの。いちばん効果を感じやすい使い方です。", items: [
+      ["歯ブラシ交換", 30, "毛先が開く前に。電動の替えブラシは90日前後"],
+      ["キッチンスポンジ", 21, "雑菌が増えやすいので早めに"],
+      ["水切りネット", 3, "短いサイクルほど過ぎたことに気づきにくい"],
+      ["浄水器カートリッジ", 90, "メーカーの交換目安を入れておく"],
+      ["掃除機の紙パック", 150, "型番はメモに残しておくと買うとき楽"],
+      ["換気扇フィルター", 90, ""],
+      ["カミソリの替え刃", 14, ""],
+      ["コンタクトのケース", 90, ""],
+    ]},
+    { ic: "💇", name: "からだのメンテナンス", why: "前回からの日数が、次の予約を入れるきっかけになります。", items: [
+      ["美容院", 45, "お店・担当・メニューはその回のメモに"],
+      ["歯医者の定期検診", 90, ""],
+      ["爪を切る", 14, "足の爪は手より間隔が長め"],
+      ["眉・ひげのお手入れ", 21, ""],
+      ["健康診断", 365, "年1回もの。思い出す用に"],
+    ]},
+    { ic: "🧺", name: "家の掃除・洗濯", why: "毎週ではないけれど、たまにやらないといけない家事に。", items: [
+      ["シーツ洗濯", 7, ""],
+      ["布団を干す・掃除", 30, ""],
+      ["洗濯槽の掃除", 30, ""],
+      ["排水口の掃除", 14, ""],
+      ["エアコンのフィルター掃除", 14, "冷暖房を使う季節だけでもOK"],
+      ["冷蔵庫の中の整理", 30, ""],
+    ]},
+    { ic: "🚗", name: "持ち物・乗り物", why: "長い間隔のものほど、記録がないと思い出せません。", items: [
+      ["車のオイル交換", 180, ""],
+      ["タイヤの空気圧チェック", 30, ""],
+      ["靴の手入れ", 30, ""],
+      ["スマホの写真を整理・バックアップ", 30, ""],
+      ["自作アプリのデータを書き出す", 30, "このアプリ自身もここに入れておくと安心"],
+    ]},
+    { ic: "📮", name: "記録だけ（目安なし）", why: "替えどきはないけれど「ずいぶんやってないな」に気づきたいもの。目安を空けて登録すると「記録だけ」タブに入ります。", items: [
+      ["実家に電話", null, ""],
+      ["友だちに連絡", null, ""],
+      ["本棚の整理", null, ""],
+      ["映画館・美術館に行く", null, ""],
+    ]},
+  ];
+  const KEY = "elapsed_tracker_tasks_v1";
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } }
+  function has(name) { return load().some(t => !t.deleted && t.name === name); }
+  function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove("show"), 2200); }
+  function add(name, iv, btn) {
+    const tasks = load();
+    if (tasks.some(t => !t.deleted && t.name === name)) { btn.classList.add("done"); btn.textContent = "✓"; return; }
+    tasks.push({ id: Date.now(), name, dates: [], interval: iv || null, memo: "", deleted: false, updatedAt: Date.now() });
+    try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) { toast("追加できませんでした"); return; }
+    btn.classList.add("done"); btn.textContent = "✓";
+    toast("「" + name + "」を追加しました");
+  }
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  document.getElementById("cats").innerHTML = CATS.map((c, ci) =>
+    '<div class="cat"><h3><span>' + c.ic + '</span>' + esc(c.name) + '</h3><p class="why">' + esc(c.why) + '</p><div class="items">' +
+    c.items.map(([n, iv, s], ii) =>
+      '<div class="item"><div class="t"><div class="n">' + esc(n) + '</div>' + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>' +
+      (iv ? '<div class="iv">' + iv + '<small>日ごと</small></div>' : '<div class="iv none">目安なし</div>') +
+      '<button class="add' + (has(n) ? ' done' : '') + '" data-c="' + ci + '" data-i="' + ii + '" title="アプリに追加">' + (has(n) ? '✓' : '＋') + '</button></div>'
+    ).join("") + '</div></div>').join("");
+  document.getElementById("cats").addEventListener("click", (e) => {
+    const b = e.target.closest(".add"); if (!b || b.classList.contains("done")) return;
+    const [n, iv] = CATS[+b.dataset.c].items[+b.dataset.i];
+    add(n, iv, b);
+  });
+</script>
+</body>
+</html>

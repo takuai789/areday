@@ -105,6 +105,8 @@
     .tabbar .tab-count { padding: 1px 5px; font-size: 10.5px; min-width: 0; }
     .tabbar .tab-alert { padding: 1px 5px; font-size: 10.5px; margin-left: 0; }
   }
+  header.top .guide-link { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--accent); text-decoration: none; border: 1px solid rgba(194,104,62,.35); border-radius: 99px; padding: 3px 12px; align-self: center; }
+  header.top .guide-link:hover { background: var(--accent); color: #fff; }
   .fbar { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; flex-wrap: wrap; }
   .fchip { font-family: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: rgba(255,253,250,.7); border: 1px solid rgba(42,37,33,.15); border-radius: 99px; padding: 6px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
   .fchip span { font-size: 11px; opacity: .6; }
@@ -137,7 +139,7 @@
   header.top h1 { font-size: 24px; margin: 0; letter-spacing: .01em; }
   header.top .kicker { margin: 0; font-size: 11px; letter-spacing: .25em; opacity: .8; }
   body { padding-top: calc(env(safe-area-inset-top) + 18px); }
-  @media (max-width: 520px) { header.top h1 { font-size: 21px; } body { padding-top: calc(env(safe-area-inset-top) + 14px); } }
+  @media (max-width: 520px) { header.top .kicker { display: none; } header.top h1 { font-size: 21px; } body { padding-top: calc(env(safe-area-inset-top) + 14px); } }
   /* ── やめた習慣 ── */
   .ti.stopped { background: rgba(255,253,250,.6); border-style: dashed; box-shadow: none; }
   .ti.stopped .ti-name { opacity: .75; }
@@ -424,6 +426,7 @@
     <header class="top">
       <h1>あれから、何日。</h1>
       <div class="kicker">LAST DONE &nbsp;·&nbsp; <span id="versionBadge"></span></div>
+      <a class="guide-link" href="guide.html">使い道ガイド</a>
     </header>
     <div class="grid" id="grid"></div>
     <div class="add-area" id="addArea"></div>
@@ -441,7 +444,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.12.0";
+const APP_VERSION = "2.13.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -998,7 +1001,7 @@ function render() {
 
   const visible = tasks.filter(t => !t.deleted);
   if (visible.length === 0 && !adding) {
-    grid.innerHTML = '<div class="empty">まだ何も登録されていません。<br>下のボタンから追加してください。</div>';
+    grid.innerHTML = '<div class="empty">まだ何も登録されていません。<br>下のボタンから追加するか、<a href="guide.html" style="color:var(--accent);font-weight:700">使い道ガイド</a>の例から選べます。</div>';
     renderAddArea();
     return;
   }
