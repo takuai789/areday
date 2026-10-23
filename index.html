@@ -140,6 +140,9 @@
   header.top .kicker { margin: 0; font-size: 11px; letter-spacing: .25em; opacity: .8; }
   body { padding-top: calc(env(safe-area-inset-top) + 18px); }
   @media (max-width: 520px) { header.top .kicker { display: none; } header.top h1 { font-size: 21px; } body { padding-top: calc(env(safe-area-inset-top) + 14px); } }
+  @media (max-width: 520px) { header.top { gap: 8px; flex-wrap: nowrap; } header.top h1 { font-size: 19px; white-space: nowrap; } .today-chip { font-size: 12px !important; padding: 3px 8px !important; } header.top .guide-link { padding: 3px 9px; font-size: 12px; white-space: nowrap; } }
+  @media (max-width: 370px) { header.top { flex-wrap: wrap; } }
+  .today-chip { font-size: 12.5px; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent); background: rgba(194,104,62,.10); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
   /* ── やめた習慣 ── */
   .ti.stopped { background: rgba(255,253,250,.6); border-style: dashed; box-shadow: none; }
   .ti.stopped .ti-name { opacity: .75; }
@@ -434,6 +437,7 @@
   <div class="shell">
     <header class="top">
       <h1>あれから、何日。</h1>
+      <div class="today-chip" id="todayChip"></div>
       <div class="kicker">LAST DONE &nbsp;·&nbsp; <span id="versionBadge"></span></div>
       <a class="guide-link" href="guide.html">使い道ガイド</a>
     </header>
@@ -454,7 +458,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.18.0";
+const APP_VERSION = "2.19.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -1488,6 +1492,25 @@ function renderCloud() {
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") cloudSync(); });
 window.addEventListener("online", () => cloudSync());
 
+// ── 今日の日付（画面上部）。開きっぱなしで日付が変わったら数え直す ──
+let shownDay = "";
+function renderToday() {
+  const el = document.getElementById("todayChip"); if (!el) return;
+  const d = new Date(), W = "日月火水木金土";
+  el.textContent = "今日 " + (d.getMonth() + 1) + "/" + d.getDate() + "(" + W[d.getDay()] + ")";
+}
+function checkDay() {
+  const t = todayStr();
+  if (t === shownDay) return;
+  const first = !shownDay;
+  shownDay = t; renderToday();
+  if (!first) render();
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkDay(); });
+window.addEventListener("focus", checkDay);
+window.addEventListener("pageshow", checkDay);
+setInterval(checkDay, 60000);
+
 // ESCでモーダルを閉じる
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
@@ -1498,6 +1521,7 @@ document.getElementById("versionLine").textContent = "あれから、何日。 v
 document.getElementById("versionBadge").textContent = "v" + APP_VERSION;
 renderSyncStatus();
 renderCloud();
+checkDay();
 cloudSync();
   // ---------- Service Worker + 自動アップデート ----------
   if ('serviceWorker' in navigator) {
