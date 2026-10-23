@@ -415,6 +415,15 @@
     width: 100%; text-align: center; font-size: 12.5px;
     opacity: .75; margin-top: 6px; font-weight: 600;
   }
+  .cloud-area { flex-direction: column; align-items: stretch; text-align: center; }
+  .cloud-hd { font-size: 14px; font-weight: 700; }
+  .cloud-hd .on { color: var(--accent); }
+  .cloud-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .cloud-in { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(42,37,33,.18); background: #fff; color: var(--ink); }
+  .cloud-steps { text-align: left; font-size: 12.5px; line-height: 1.75; opacity: .8; margin: 0; padding-left: 1.4em; }
+  .cloud-steps b { font-weight: 700; }
+  .cloud-st { font-size: 12.5px; font-weight: 600; opacity: .75; }
+  .cloud-st.err { color: #c0392b; opacity: 1; }
   .sync-note {
     width: 100%; text-align: center; font-size: 11.5px; opacity: .55; line-height: 1.7;
     margin-top: 4px;
@@ -430,7 +439,8 @@
     </header>
     <div class="grid" id="grid"></div>
     <div class="add-area" id="addArea"></div>
-    <div class="sync-area">
+    <div class="sync-area cloud-area" id="cloudArea"></div>
+    <div class="sync-area" style="margin-top:16px">
       <button class="sync-btn" onclick="exportData()">⇣ データを書き出す（バックアップ）</button>
       <button class="sync-btn" onclick="pickImportFile()">⇡ データを取り込む</button>
       <div class="sync-status" id="syncStatus"></div>
@@ -439,12 +449,12 @@
         変更は項目ごとに賢く統合されます（同じ項目を両端でいじった場合は新しい方を採用）
       </div>
     </div>
-    <div class="footer-note">不定期にやることの「最後にやった日」を記録して、今日までの経過日数を数えます。<br>データはこの端末の中だけに保存されます（iPhoneとMacは別々。移すときは書き出し→取り込み）</div>
+    <div class="footer-note">不定期にやることの「最後にやった日」を記録して、今日までの経過日数を数えます。<br>データはこの端末の中に保存されます。「iPhoneとMacで共有」をオンにすると、あなたのGitHubのシークレットGist（URLを知らなければ見られないメモ）を通して自動で同じ内容になります</div>
     <div class="footer-note" id="versionLine" style="margin-top:8px"></div>
   </div>
 
 <script>
-const APP_VERSION = "2.17.0";
+const APP_VERSION = "2.18.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -474,6 +484,7 @@ function load() {
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(tasks)); }
   catch (e) { notify("保存に失敗しました: " + e.message); }
+  if (typeof cloudSchedule === "function") cloudSchedule();
 }
 // タスクの更新時刻を打刻
 function touch(task) { if (task) task.updatedAt = Date.now(); }
@@ -769,7 +780,7 @@ function importDataFromFile(file) {
 }
 
 // 取り込んだタスク群をローカルとマージし、結果を tasks に反映
-function mergeAndApply(incoming) {
+function mergeAndApply(incoming, lww) {
   const byId = new Map();
   for (const t of tasks) byId.set(t.id, t);
 
@@ -790,7 +801,9 @@ function mergeAndApply(incoming) {
     }
 
     // 履歴は和集合（順序ソート、最新MAX_HISTORY件）
-    const set = new Set([...(cur.dates||[]), ...(imp.dates||[])]);
+    const winner0 = (imp.updatedAt || 0) >= (cur.updatedAt || 0) ? imp : cur;
+    // 自動共有では「新しく更新した方」の履歴をそのまま採用（消した日付が戻らないように）。ファイル取り込みは和集合
+    const set = new Set(lww ? (winner0.dates || []) : [...(cur.dates||[]), ...(imp.dates||[])]);
     let dates = [...set].sort();
     if (dates.length > MAX_HISTORY) dates = dates.slice(dates.length - MAX_HISTORY);
 
@@ -1380,6 +1393,101 @@ function renderPicker() {
   document.body.appendChild(root);
 }
 
+
+// ── iPhoneとMacで共有（GitHub Gist） ──
+// 各端末に「gistだけ触れるトークン」を入れておくと、開いたとき・変更したときに、
+// 非公開Gistの areday-sync.json と項目ごとに統合（新しく更新した方を採用）して書き戻す
+const GIST_KEY = "elapsed_tracker_gist_v1";
+const GIST_FILE = "areday-sync.json";
+let gistCfg = null;
+try { gistCfg = JSON.parse(localStorage.getItem(GIST_KEY) || "null"); } catch (e) {}
+let cloudBusy = false, cloudAgain = false, cloudTimer = 0, cloudMsg = "", cloudErr = false, cloudInMerge = false;
+function saveGistCfg() { try { if (gistCfg) localStorage.setItem(GIST_KEY, JSON.stringify(gistCfg)); else localStorage.removeItem(GIST_KEY); } catch (e) {} }
+async function gh(path, opt = {}) {
+  const headers = { Authorization: "Bearer " + gistCfg.token, Accept: "application/vnd.github+json" };
+  if (opt.body) headers["Content-Type"] = "application/json";
+  const r = await fetch("https://api.github.com" + path, Object.assign({}, opt, { headers, cache: "no-store" }));
+  if (!r.ok) throw new Error(r.status === 401 ? "トークンが使えません（期限切れ・打ち間違い）" : r.status === 403 ? "トークンにgistの権限がありません" : r.status === 404 ? "共有データが見つかりません" : "GitHubエラー " + r.status);
+  return r.json();
+}
+const canon = (arr) => JSON.stringify([...arr].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0)));
+function cloudPayload() { return JSON.stringify({ app: "areday", v: DATA_VERSION, at: Date.now(), tasks }); }
+async function findOrCreateGist() {
+  for (let p = 1; p <= 5; p++) {
+    const list = await gh("/gists?per_page=100&page=" + p);
+    const g = list.find((x) => x.files && x.files[GIST_FILE]);
+    if (g) return g.id;
+    if (list.length < 100) break;
+  }
+  const g = await gh("/gists", { method: "POST", body: JSON.stringify({ description: "あれから、何日。 iPhoneとMacの共有データ", public: false, files: { [GIST_FILE]: { content: cloudPayload() } } }) });
+  return g.id;
+}
+function cloudSchedule() {
+  if (!gistCfg || cloudInMerge) return;
+  clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(cloudSync, 1500);
+}
+async function cloudSync() {
+  if (!gistCfg || !gistCfg.token) return;
+  if (cloudBusy) { cloudAgain = true; return; }
+  cloudBusy = true; cloudErr = false; cloudMsg = "同期中…"; renderCloud();
+  try {
+    if (!gistCfg.id) { gistCfg.id = await findOrCreateGist(); saveGistCfg(); }
+    const g = await gh("/gists/" + gistCfg.id);
+    const f = g.files && g.files[GIST_FILE];
+    let remote = [];
+    if (f) {
+      let text = f.content;
+      if (f.truncated && f.raw_url) text = await (await fetch(f.raw_url, { cache: "no-store" })).text();
+      try { const d = JSON.parse(text); remote = Array.isArray(d) ? d : (d.tasks || []); } catch (e) {}
+    }
+    if (remote.length) { cloudInMerge = true; try { mergeAndApply(remote.map((t) => Object.assign({}, t)), true); } finally { cloudInMerge = false; } }
+    if (!f || canon(tasks) !== canon(remote)) {
+      await gh("/gists/" + gistCfg.id, { method: "PATCH", body: JSON.stringify({ files: { [GIST_FILE]: { content: cloudPayload() } } }) });
+    }
+    gistCfg.at = Date.now(); saveGistCfg();
+    cloudMsg = "";
+  } catch (e) {
+    cloudErr = true; cloudMsg = navigator.onLine === false ? "オフラインのため、つながったら同期します" : (e.message || "同期できませんでした");
+  } finally {
+    cloudBusy = false; renderCloud();
+    if (cloudAgain) { cloudAgain = false; cloudSync(); }
+  }
+}
+function renderCloud() {
+  const el = document.getElementById("cloudArea"); if (!el) return;
+  if (!gistCfg) {
+    el.innerHTML = `<div class="cloud-hd">iPhoneとMacで共有</div>
+      <ol class="cloud-steps">
+        <li>GitHubで <b>Settings → Developer settings → Personal access tokens → Tokens (classic)</b> を開き、<b>Generate new token (classic)</b></li>
+        <li>Note は「areday」、Expiration は「No expiration」、権限は <b>gist だけ</b> にチェックして作成</li>
+        <li>表示された <b>ghp_</b> で始まる文字をコピーして、下に貼って「共有をはじめる」（iPhoneとMacの両方で同じものを貼る）</li>
+      </ol>
+      <input class="cloud-in" id="cloudToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ghp_…">
+      <div class="cloud-row"><button class="sync-btn" id="cloudOn">共有をはじめる</button></div>`;
+    document.getElementById("cloudOn").onclick = async () => {
+      const v = document.getElementById("cloudToken").value.trim();
+      if (!v) return notify("トークンを貼ってください");
+      gistCfg = { token: v, id: "", at: 0 }; saveGistCfg();
+      await cloudSync();
+      if (cloudErr && !gistCfg.id) { const m = cloudMsg; gistCfg = null; saveGistCfg(); renderCloud(); notify("つなげませんでした：" + m); }
+      else notify("共有をはじめました。もう一方の端末でも同じトークンを貼ってください。");
+    };
+    return;
+  }
+  const at = gistCfg.at ? (() => { const d = new Date(gistCfg.at); return (d.getMonth() + 1) + "/" + d.getDate() + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); })() : "—";
+  el.innerHTML = `<div class="cloud-hd">iPhoneとMacで共有 <span class="on">● オン</span></div>
+    <div class="cloud-st${cloudErr ? " err" : ""}">${cloudMsg || "最終同期：" + at + "（開いたとき・変えたときに自動）"}</div>
+    <div class="cloud-row"><button class="sync-btn" id="cloudNow">今すぐ同期</button><button class="sync-btn" id="cloudOff">この端末の共有をやめる</button></div>`;
+  document.getElementById("cloudNow").onclick = () => cloudSync();
+  document.getElementById("cloudOff").onclick = async () => {
+    if (!(await dialog("この端末の共有をやめますか？\nこの端末のデータはそのまま残ります。", "やめる", "キャンセル"))) return;
+    gistCfg = null; saveGistCfg(); renderCloud();
+  };
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") cloudSync(); });
+window.addEventListener("online", () => cloudSync());
+
 // ESCでモーダルを閉じる
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
@@ -1389,6 +1497,8 @@ render();
 document.getElementById("versionLine").textContent = "あれから、何日。 v" + APP_VERSION;
 document.getElementById("versionBadge").textContent = "v" + APP_VERSION;
 renderSyncStatus();
+renderCloud();
+cloudSync();
   // ---------- Service Worker + 自動アップデート ----------
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
