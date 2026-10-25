@@ -157,6 +157,10 @@
   .dlg-title { font-size: 15px; font-weight: 700; margin: 2px 0 12px; }
   .dlg-input { width: 100%; font-family: inherit; font-size: 15px; color: var(--ink); background: rgba(42,37,33,.04); border: 1px solid rgba(194,104,62,.3); border-radius: 12px; padding: 10px 12px; outline: none; resize: vertical; margin-bottom: 16px; line-height: 1.6; }
   .dlg-input:focus { border-color: var(--accent); }
+  .ti.off { opacity: .6; background: rgba(255,253,250,.55); border-style: dashed; }
+  .ti.off .ti-num .n { color: var(--ink); opacity: .7; }
+  .grp.g-off { opacity: .7; }
+  .season-off { font-size: 12.5px; line-height: 1.6; background: rgba(42,37,33,.06); border-radius: 10px; padding: 8px 10px; margin: 4px 0 10px; }
   .kind-seg { display: flex; border-radius: 12px; overflow: hidden; border: 1px solid rgba(194,104,62,.4); margin-bottom: 10px; }
   .kind-seg button { flex: 1; border: 0; background: #fff; color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; padding: 9px 6px; cursor: pointer; }
   .kind-seg button.on { background: var(--accent); color: #fff; }
@@ -510,12 +514,13 @@
   </div>
 
 <script>
-const APP_VERSION = "2.22.0";
+const APP_VERSION = "2.23.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
 let addKind = "repeat";        // 追加フォーム：repeat=替えどき・記録 / deadline=期限もの
-let dlEditFor = null;          // 期限の編集中
+let dlEditFor = null;
+let seasonEditFor = null;      // 使う時期の編集中          // 期限の編集中
 let dlRenewFor = null;         // 「更新した」の入力中
 let editIntervalFor = null;
 let planEditFor = null;      // 次の予定を編集中の項目
@@ -635,6 +640,15 @@ function planGap(task) {   // 予定日が目安の日から何日ずれてい�
   const due = dueDate(last, task.interval);
   return Math.round((new Date(task.plan.date + "T00:00:00") - due) / 86400000);
 }
+// ── 季節もの（加湿器など、使う時期だけ管理する） ──
+// task.seasonFrom / task.seasonTo = 1〜12月。時期の外は「お休み中」：経過日数は数えるが、替えどき・お知らせの対象から外す
+function inSeason(t, d = new Date()) {
+  if (!t.seasonFrom || !t.seasonTo) return true;
+  const m = d.getMonth() + 1, f = t.seasonFrom, to = t.seasonTo;
+  return f <= to ? (m >= f && m <= to) : (m >= f || m <= to);
+}
+const offSeason = (t) => !inSeason(t);
+const seasonText = (t) => t.seasonFrom ? t.seasonFrom + "〜" + t.seasonTo + "月" : "";
 // ── 期限もの（免許・パスポートなど決まった期限がある項目） ──
 // task.deadline="YYYY-MM-DD", task.leadMonths=何か月前から手続きできるか, task.cycleYears=更新の周期（年・任意）
 const isDeadline = (t) => !!t.deadline;
@@ -926,6 +940,8 @@ function mergeAndApply(incoming, lww) {
       archivedAt: winner.archivedAt || "",
       stopNote: winner.stopNote || "",
       deadline: winner.deadline || "",
+      seasonFrom: winner.seasonFrom || 0,
+      seasonTo: winner.seasonTo || 0,
       leadMonths: winner.leadMonths || 0,
       cycleYears: winner.cycleYears || 0,
       plan: winner.plan && winner.plan.date ? { date: winner.plan.date, kind: winner.plan.kind === "booked" ? "booked" : "tentative" } : null,
@@ -941,7 +957,7 @@ function mergeAndApply(incoming, lww) {
       (cur.archived === true) === merged.archived &&
       (cur.stopNote || "") === merged.stopNote &&
       JSON.stringify(cur.plan || null) === JSON.stringify(merged.plan) &&
-      (cur.deadline || "") === merged.deadline && (cur.leadMonths || 0) === merged.leadMonths && (cur.cycleYears || 0) === merged.cycleYears &&
+      (cur.deadline || "") === merged.deadline && (cur.seasonFrom || 0) === merged.seasonFrom && (cur.seasonTo || 0) === merged.seasonTo && (cur.leadMonths || 0) === merged.leadMonths && (cur.cycleYears || 0) === merged.cycleYears &&
       JSON.stringify(cur.dates || []) === JSON.stringify(merged.dates) &&
       JSON.stringify(cur.notes || {}) === JSON.stringify(merged.notes);
     if (samePayload) same++;
@@ -979,7 +995,8 @@ function buildCard(task, i) {
     if (isDeadline(task)) return buildDlCard(task);
     const last = lastDate(task);
     const days = daysSince(last);
-    const { status, ratio } = statusOf(task, days);
+    const off = offSeason(task);   // 季節外は替えどきの判定をしない
+    const { status, ratio } = off ? { status: "none", ratio: 0 } : statusOf(task, days);
     const remaining = (task.interval && days !== null) ? task.interval - days : null;
     const numColor = status === "over" ? "var(--over)" : status === "soon" ? "#c27a1e" : "var(--accent)";
     const barColor = status === "over" ? "var(--over)" : status === "soon" ? "var(--warn)" : "var(--accent)";
@@ -992,7 +1009,7 @@ function buildCard(task, i) {
     // (1) 目安あり × 記録あり → 案C（時間軸＋過去/未来の2つの数字）
     // (2) それ以外 → 従来レイアウト（大きい数字1つ）
     let displayHtml;
-    if (task.interval && days !== null) {
+    if (task.interval && days !== null && !off) {
       const due = dueDate(last, task.interval);
       const dueStr = fmtShort(due);
       const lastStr = fmtShort(new Date(last + "T00:00:00"));
@@ -1089,7 +1106,7 @@ function buildCard(task, i) {
       '<div class="card-top">' + nameHtml +
         '<button class="stop-btn" title="やめた習慣に移す" onclick="stopTask('+task.id+')">やめる</button>' +
         '<button class="icon-btn" title="削除" onclick="removeTask('+task.id+')">🗑</button></div>' +
-      displayHtml + intervalLinkHtml + editHtml + planHtml(task) + avgHtml +
+      seasonBadge(task) + displayHtml + intervalLinkHtml + editHtml + seasonHtml(task) + planHtml(task) + avgHtml +
       '<div class="actions">' +
         '<button class="primary" onclick="quickDone('+task.id+')">✓ 今日やった！</button>' +
         '<button class="ghost" onclick="openPicker('+task.id+')">📅 日付を選ぶ</button>' +
@@ -1104,6 +1121,35 @@ function buildCard(task, i) {
     return card;
 }
 
+// ── 使う時期（季節もの）の設定 ──
+function seasonBadge(task) {
+  return offSeason(task) ? '<div class="season-off">いまは季節外でお休み中（' + seasonText(task) + 'に使う）。経過日数は数えていますが、替えどきのお知らせには出しません。</div>' : '';
+}
+function seasonHtml(task) {
+  if (seasonEditFor === task.id) {
+    const opt = (v) => Array.from({ length: 12 }, (_, i) => '<option value="' + (i + 1) + '"' + (v === i + 1 ? ' selected' : '') + '>' + (i + 1) + '月</option>').join('');
+    return '<div class="plan-edit"><div class="plan-edit-hd">使う時期（この期間の外は管理をお休み）</div>' +
+      '<select class="unit-sel" id="seaFrom' + task.id + '">' + opt(task.seasonFrom || 11) + '</select><span class="unit">〜</span>' +
+      '<select class="unit-sel" id="seaTo' + task.id + '">' + opt(task.seasonTo || 3) + '</select>' +
+      '<div class="plan-btns"><button class="primary" onclick="saveSeason(' + task.id + ')">保存</button>' +
+      (task.seasonFrom ? '<button class="ghost" onclick="clearSeason(' + task.id + ')">一年中にする</button>' : '') +
+      '<button class="cancel" onclick="seasonEditFor=null;render()">✕</button></div></div>';
+  }
+  return task.seasonFrom
+    ? '<button class="interval-mini-link" onclick="seasonEditFor=' + task.id + ';render()">使う時期 ' + seasonText(task) + '（変更）</button>'
+    : '<button class="set-plan-link" onclick="seasonEditFor=' + task.id + ';render()">＋ 使う時期を決める（冬だけ・夏だけなど）</button>';
+}
+function saveSeason(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  const f = +document.getElementById("seaFrom" + id).value, to = +document.getElementById("seaTo" + id).value;
+  if (f === to) { showToast("始まりと終わりを別の月にしてください"); return; }
+  t.seasonFrom = f; t.seasonTo = to; touch(t); save(); seasonEditFor = null; render();
+  showToast("使う時期を " + f + "〜" + to + "月にしました" + (offSeason(t) ? "（いまはお休み中）" : ""));
+}
+function clearSeason(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  t.seasonFrom = 0; t.seasonTo = 0; touch(t); save(); seasonEditFor = null; render();
+}
 // ── 次の予定（仮／予約済み） ──
 function planHtml(task) {
   if (planEditFor === task.id) {
@@ -1195,8 +1241,9 @@ function render() {
   }
 
   const active = visible.filter(t => !t.archived);
-  const tracked = active.filter(t => t.interval && !isDeadline(t)).sort(sortByDue);
-  const simple = active.filter(t => !t.interval && !isDeadline(t)).sort(sortByElapsed);
+  const seasonLast = (arr) => arr.filter(t => !offSeason(t)).concat(arr.filter(offSeason));
+  const tracked = seasonLast(active.filter(t => t.interval && !isDeadline(t)).sort(sortByDue));
+  const simple = seasonLast(active.filter(t => !t.interval && !isDeadline(t)).sort(sortByElapsed));
   const dlList = active.filter(isDeadline).sort((a, b) => a.deadline.localeCompare(b.deadline));
   const dlAlert = dlList.filter(t => dlStatus(t) !== "later").length;
   const stopped = visible.filter(t => t.archived).sort((a, b) => String(b.archivedAt || "").localeCompare(String(a.archivedAt || "")));
@@ -1228,10 +1275,12 @@ function render() {
   tabbar.className = "tabbar";
   // 替えどき超過（またはもうすぐ）の件数
   const overCount = tracked.filter(t => {
+    if (offSeason(t)) return false;
     const d = daysSince(lastDate(t));
     return d !== null && d >= t.interval;
   }).length;
   const soonCount = tracked.filter(t => {
+    if (offSeason(t)) return false;
     const d = daysSince(lastDate(t));
     return d !== null && d < t.interval && d / t.interval >= 0.8;
   }).length;
@@ -1309,7 +1358,7 @@ function render() {
     return;
   }
 
-  const focusList = tracked.filter(t => { const r = restOf(t); return r !== null && r <= 3; })
+  const focusList = tracked.filter(t => { if (offSeason(t)) return false; const r = restOf(t); return r !== null && r <= 3; })
     .sort((a, b) => { const ra = restOf(a), rb = restOf(b);
       if ((ra < 0) !== (rb < 0)) return ra < 0 ? -1 : 1;
       return ra < 0 ? sortByDue(a, b) : ra - rb; });
@@ -1351,13 +1400,19 @@ function render() {
     let lastGrp = null;
     list.forEach(task => {
       const d = daysSince(lastDate(task));
-      const { status } = statusOf(task, d);
+      const { status } = offSeason(task) ? { status: "none" } : statusOf(task, d);
+      if (activeTab === "simple" && offSeason(task) && lastGrp !== "off") {
+        const cnt = list.filter(offSeason).length;
+        const h = document.createElement("div");
+        h.className = "grp g-off"; h.innerHTML = '季節外（お休み中） <span class="n">' + cnt + '</span>';
+        sub.appendChild(h); lastGrp = "off";
+      }
       if (activeTab === "tracked") {
-        const grpOf = (t) => { const dd = daysSince(lastDate(t)); if (dd === null) return "never"; const st = statusOf(t, dd).status; return focusMode ? (st === "over" ? "over" : "due3") : st; };
+        const grpOf = (t) => { if (offSeason(t)) return "off"; const dd = daysSince(lastDate(t)); if (dd === null) return "never"; const st = statusOf(t, dd).status; return focusMode ? (st === "over" ? "over" : "due3") : st; };
         const g = grpOf(task);
         if (g !== lastGrp) {
           const cnt = list.filter(t => grpOf(t) === g).length;
-          const label = { over: "替えどきを過ぎた", soon: "もうすぐ", ok: "まだ大丈夫", never: "まだ記録なし", due3: "3日以内" }[g];
+          const label = { over: "替えどきを過ぎた", soon: "もうすぐ", ok: "まだ大丈夫", never: "まだ記録なし", due3: "3日以内", off: "季節外（お休み中）" }[g];
           const h = document.createElement("div");
           h.className = "grp g-" + g; h.innerHTML = label + ' <span class="n">' + cnt + '</span>';
           sub.appendChild(h); lastGrp = g;
@@ -1475,6 +1530,17 @@ function renewDl(id) {
 
 function buildRow(task, days, status) {
   const row = document.createElement("div");
+  if (offSeason(task)) {
+    row.className = "ti off";
+    const last = lastDate(task);
+    const sub = (last ? "最終 " + fmtShort(new Date(last + "T00:00:00")) + " ・ " : "") + "お休み中（" + seasonText(task) + "に使う）";
+    const num = days === null ? '<span class="ti-never">未記録</span>' : '<span class="l"></span><span class="n">' + days + '</span><span class="u">日前</span>';
+    row.innerHTML = '<div class="ti-main"><div class="ti-name"></div><div class="ti-sub"></div></div><div class="ti-num">' + num + '</div><button class="ti-done" title="今日やった">✓</button>';
+    row.querySelector(".ti-name").textContent = task.name;
+    row.querySelector(".ti-sub").textContent = sub;
+    row.onclick = (e) => { if (e.target.closest(".ti-done")) { quickDone(task.id); return; } openId = task.id; editIntervalFor = null; editNameFor = null; render(); };
+    return row;
+  }
   const ol = status === "over" && task.interval && days !== null ? overLevel(task, days) : null;
   row.className = "ti " + (ol ? "over lv" + ol.lv : status === "soon" ? "soon" : "");
   const last = lastDate(task);
@@ -1579,7 +1645,7 @@ function resumeTask(id) {
 
 function switchTab(tab) {
   activeTab = tab;
-  openId = null; dlEditFor = null; dlRenewFor = null;
+  openId = null; dlEditFor = null; dlRenewFor = null; seasonEditFor = null;
   editIntervalFor = null;
   editNameFor = null;
   render();
