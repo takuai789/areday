@@ -157,6 +157,24 @@
   .dlg-title { font-size: 15px; font-weight: 700; margin: 2px 0 12px; }
   .dlg-input { width: 100%; font-family: inherit; font-size: 15px; color: var(--ink); background: rgba(42,37,33,.04); border: 1px solid rgba(194,104,62,.3); border-radius: 12px; padding: 10px 12px; outline: none; resize: vertical; margin-bottom: 16px; line-height: 1.6; }
   .dlg-input:focus { border-color: var(--accent); }
+  .kind-seg { display: flex; border-radius: 12px; overflow: hidden; border: 1px solid rgba(194,104,62,.4); margin-bottom: 10px; }
+  .kind-seg button { flex: 1; border: 0; background: #fff; color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; padding: 9px 6px; cursor: pointer; }
+  .kind-seg button.on { background: var(--accent); color: #fff; }
+  .add-card .date-input { font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(42,37,33,.18); background: #fff; color: var(--ink); }
+  .dl-big { display: flex; align-items: baseline; gap: 6px; margin: 4px 0 2px; }
+  .dl-big span { font-size: 14px; font-weight: 700; opacity: .7; }
+  .dl-big b { font-family: inherit; font-size: 44px; font-weight: 800; color: var(--accent); line-height: 1.05; }
+  .dl-big.over b { color: var(--over); }
+  .dlcard.soon .dl-big b { color: #c27a1e; }
+  .dl-date { font-size: 13px; opacity: .7; margin-bottom: 4px; }
+  .dl-open-line { font-size: 14px; margin: 2px 0 8px; }
+  .dl-open-line.now { font-weight: 800; color: #c27a1e; }
+  .dl-hint { font-size: 11.5px; opacity: .6; margin-top: 2px; }
+  .ti-plan.dl-open { background: #c27a1e; color: #fff; }
+  .ti.dl .ti-num .l { font-size: 11px; }
+  .dl-alert { margin: 0 0 14px; padding: 12px 14px; border-radius: 16px; background: #fff8ec; border: 1px solid rgba(194,122,30,.35); cursor: pointer; }
+  .dl-alert .pa-hd { color: #c27a1e; }
+  .dl-go { font-size: 22px; opacity: .4; }
   .set-plan-link { display: block; border: 0; background: none; padding: 0; margin: -6px 0 14px; font: inherit; font-size: 13px; font-weight: 700; color: var(--accent); opacity: .8; cursor: pointer; }
   .plan-box { margin: -4px 0 14px; padding: 10px 12px; border-radius: 12px; background: rgba(194,104,62,.08); border: 1px dashed rgba(194,104,62,.45); cursor: pointer; }
   .plan-box.booked { border-style: solid; background: rgba(194,104,62,.12); }
@@ -492,10 +510,13 @@
   </div>
 
 <script>
-const APP_VERSION = "2.21.0";
+const APP_VERSION = "2.22.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
+let addKind = "repeat";        // 追加フォーム：repeat=替えどき・記録 / deadline=期限もの
+let dlEditFor = null;          // 期限の編集中
+let dlRenewFor = null;         // 「更新した」の入力中
 let editIntervalFor = null;
 let planEditFor = null;      // 次の予定を編集中の項目
 let planKindDraft = "tentative";
@@ -613,6 +634,22 @@ function planGap(task) {   // 予定日が目安の日から何日ずれてい�
   if (!task.plan || !task.interval || !last) return null;
   const due = dueDate(last, task.interval);
   return Math.round((new Date(task.plan.date + "T00:00:00") - due) / 86400000);
+}
+// ── 期限もの（免許・パスポートなど決まった期限がある項目） ──
+// task.deadline="YYYY-MM-DD", task.leadMonths=何か月前から手続きできるか, task.cycleYears=更新の周期（年・任意）
+const isDeadline = (t) => !!t.deadline;
+function addMonthsStr(s, m) {
+  const d = new Date(s + "T00:00:00"); const day = d.getDate();
+  d.setDate(1); d.setMonth(d.getMonth() + Math.round(m));
+  const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); d.setDate(Math.min(day, dim));
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function dlOpenDate(t) { return t.leadMonths ? addMonthsStr(t.deadline, -t.leadMonths) : t.deadline; }
+function dlStatus(t) {   // over=期限切れ / open=手続きの時期 / later=まだ先
+  const left = daysUntil(t.deadline);
+  if (left < 0) return "over";
+  if (daysUntil(dlOpenDate(t)) <= 0) return "open";
+  return "later";
 }
 function planPassed(task) { return !!(task.plan && task.plan.date < todayStr()); }
 
@@ -888,6 +925,9 @@ function mergeAndApply(incoming, lww) {
       archived: winner.archived === true,
       archivedAt: winner.archivedAt || "",
       stopNote: winner.stopNote || "",
+      deadline: winner.deadline || "",
+      leadMonths: winner.leadMonths || 0,
+      cycleYears: winner.cycleYears || 0,
       plan: winner.plan && winner.plan.date ? { date: winner.plan.date, kind: winner.plan.kind === "booked" ? "booked" : "tentative" } : null,
       updatedAt: Math.max(cur.updatedAt || 0, imp.updatedAt || 0),
     };
@@ -901,6 +941,7 @@ function mergeAndApply(incoming, lww) {
       (cur.archived === true) === merged.archived &&
       (cur.stopNote || "") === merged.stopNote &&
       JSON.stringify(cur.plan || null) === JSON.stringify(merged.plan) &&
+      (cur.deadline || "") === merged.deadline && (cur.leadMonths || 0) === merged.leadMonths && (cur.cycleYears || 0) === merged.cycleYears &&
       JSON.stringify(cur.dates || []) === JSON.stringify(merged.dates) &&
       JSON.stringify(cur.notes || {}) === JSON.stringify(merged.notes);
     if (samePayload) same++;
@@ -935,6 +976,7 @@ function statusOf(task, days) {
 }
 
 function buildCard(task, i) {
+    if (isDeadline(task)) return buildDlCard(task);
     const last = lastDate(task);
     const days = daysSince(last);
     const { status, ratio } = statusOf(task, days);
@@ -1092,7 +1134,7 @@ function startEditPlan(id) {
     // まだ予定がなければ、目安の日（なければ1か月後）を初期値に
     setTimeout(() => { const el = document.getElementById("planDate" + id); if (el && !el.value) { const last = lastDate(t); const d = t.interval && last ? dueDate(last, t.interval) : new Date(Date.now() + 30 * 86400000); el.value = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); } }, 0);
   }
-  activeTab = t.interval ? "tracked" : "simple"; focusMode = false;
+  activeTab = isDeadline(t) ? "deadline" : t.interval ? "tracked" : "simple"; focusMode = false;
   openId = id; render();
 }
 function savePlan(id) {
@@ -1153,10 +1195,22 @@ function render() {
   }
 
   const active = visible.filter(t => !t.archived);
-  const tracked = active.filter(t => t.interval).sort(sortByDue);
-  const simple = active.filter(t => !t.interval).sort(sortByElapsed);
+  const tracked = active.filter(t => t.interval && !isDeadline(t)).sort(sortByDue);
+  const simple = active.filter(t => !t.interval && !isDeadline(t)).sort(sortByElapsed);
+  const dlList = active.filter(isDeadline).sort((a, b) => a.deadline.localeCompare(b.deadline));
+  const dlAlert = dlList.filter(t => dlStatus(t) !== "later").length;
   const stopped = visible.filter(t => t.archived).sort((a, b) => String(b.archivedAt || "").localeCompare(String(a.archivedAt || "")));
 
+  // 手続きの時期に入った期限もの（予約がまだのもの）
+  const dlDue = active.filter(t => isDeadline(t) && dlStatus(t) !== "later" && !t.plan);
+  if (dlDue.length && activeTab !== "deadline") {
+    const box = document.createElement("div");
+    box.className = "dl-alert";
+    box.innerHTML = '<div class="pa-hd">そろそろ手続きの時期</div>' + dlDue.map(t => '<div class="pa-row" data-dl="' + t.id + '"><div class="pa-t"><b></b><span>期限 ' + ymdJ(t.deadline) + (daysUntil(t.deadline) < 0 ? '（期限切れ）' : '（あと' + daysUntil(t.deadline) + '日）') + '</span></div><span class="dl-go">›</span></div>').join('');
+    dlDue.forEach((t, i) => { box.querySelectorAll(".pa-t b")[i].textContent = t.name; });
+    box.onclick = (e) => { const r = e.target.closest("[data-dl]"); if (r) { activeTab = "deadline"; openId = +r.dataset.dl; render(); } };
+    grid.appendChild(box);
+  }
   // 予定日を過ぎたもの：「やった？」と聞く
   const passed = active.filter(planPassed);
   if (passed.length) {
@@ -1191,6 +1245,8 @@ function render() {
       '替えどき管理 <span class="tab-count">'+tracked.length+'</span>'+alertBadge+'</button>' +
     '<button class="tab'+(activeTab==="simple"?" active":"")+'" onclick="switchTab(\'simple\')">' +
       '記録だけ <span class="tab-count">'+simple.length+'</span></button>' +
+    '<button class="tab'+(activeTab==="deadline"?" active":"")+'" onclick="switchTab(\'deadline\')">' +
+      '期限 <span class="tab-count">'+dlList.length+'</span>'+(dlAlert ? '<span class="tab-alert soon">'+dlAlert+'</span>' : '')+'</button>' +
     '<button class="tab'+(activeTab==="stopped"?" active":"")+'" onclick="switchTab(\'stopped\')">' +
       'やめた <span class="tab-count">'+stopped.length+'</span></button>';
   grid.appendChild(tabbar);
@@ -1210,6 +1266,43 @@ function render() {
       const sub = document.createElement("div");
       sub.className = "tlist";
       stopped.forEach(t => sub.appendChild(buildStoppedRow(t)));
+      grid.appendChild(sub);
+    }
+    renderAddArea();
+    return;
+  }
+
+  // 期限もの：期限切れ → 手続きの時期 → まだ先
+  if (activeTab === "deadline") {
+    if (!dlList.length) {
+      const e = document.createElement("div");
+      e.className = "empty";
+      e.innerHTML = "期限があることはまだありません。<br>運転免許・パスポート・保険の更新などを「＋ やることを追加」→「期限があること」で入れると、手続きできる時期を教えます。";
+      grid.appendChild(e);
+    } else {
+      const sub = document.createElement("div");
+      sub.className = "tlist";
+      let lastG = null;
+      dlList.forEach(task => {
+        const g = dlStatus(task);
+        if (g !== lastG) {
+          const cnt = dlList.filter(t => dlStatus(t) === g).length;
+          const h = document.createElement("div");
+          h.className = "grp g-" + (g === "over" ? "over" : g === "open" ? "soon" : "ok");
+          h.innerHTML = { over: "期限切れ", open: "手続きの時期", later: "まだ先" }[g] + ' <span class="n">' + cnt + '</span>';
+          sub.appendChild(h); lastG = g;
+        }
+        if (openId === task.id) {
+          const wrap = document.createElement("div");
+          wrap.className = "ti-open";
+          wrap.appendChild(buildCard(task, 0));
+          const c = document.createElement("button");
+          c.className = "ti-close"; c.textContent = "▲ とじる";
+          c.onclick = () => { openId = null; render(); };
+          wrap.appendChild(c);
+          sub.appendChild(wrap);
+        } else sub.appendChild(buildDlRow(task));
+      });
       grid.appendChild(sub);
     }
     renderAddArea();
@@ -1293,6 +1386,91 @@ function render() {
     const el = document.getElementById("nameInput" + editNameFor);
     if (el) { el.focus(); el.select(); }
   }
+}
+
+// ── 期限ものの行と詳細カード ──
+function ymdJ(s) { const [y, m, d] = s.split("-").map(Number); return (y !== new Date().getFullYear() ? y + "/" : "") + m + "/" + d; }
+function buildDlRow(task) {
+  const row = document.createElement("div");
+  const st = dlStatus(task), left = daysUntil(task.deadline), open = dlOpenDate(task);
+  row.className = "ti dl " + (st === "over" ? "over lv2" : st === "open" ? "soon" : "");
+  let sub = "期限 " + ymdJ(task.deadline);
+  if (task.leadMonths) sub += " ・ 手続き " + ymdJ(open) + "〜";
+  if (task.memo) sub += " ・ " + task.memo.split("\n")[0];
+  const planChip = task.plan ? '<span class="ti-plan ' + task.plan.kind + (planPassed(task) ? ' passed' : '') + '">' + (planPassed(task) ? "予定 " + ymdJ(task.plan.date) + " を過ぎた" : "予定 " + ymdJ(task.plan.date) + "（" + PLAN_KIND[task.plan.kind] + "）") + '</span>' : '';
+  const hint = st === "open" ? '<span class="ti-plan dl-open">手続きできます</span>' : st === "later" && task.leadMonths ? '<div class="dl-hint">手続きまで あと' + daysUntil(open) + '日</div>' : '';
+  const num = left < 0
+    ? '<span class="l">期限切れ</span><span class="n">' + (-left) + '</span><span class="u">日</span>'
+    : '<span class="l">期限まで</span><span class="n">' + left + '</span><span class="u">日</span>';
+  row.innerHTML = '<div class="ti-main"><div class="ti-name"></div><div class="ti-sub"></div>' + hint + planChip + '</div><div class="ti-num">' + num + '</div>';
+  row.querySelector(".ti-name").textContent = task.name;
+  row.querySelector(".ti-sub").textContent = sub;
+  row.onclick = () => { openId = task.id; dlEditFor = null; dlRenewFor = null; editNameFor = null; render(); };
+  return row;
+}
+function buildDlCard(task) {
+  const card = document.createElement("div");
+  const st = dlStatus(task), left = daysUntil(task.deadline), open = dlOpenDate(task);
+  card.className = "card dlcard" + (st === "over" ? " over" : st === "open" ? " soon" : "");
+  const nameHtml = editNameFor === task.id
+    ? '<input class="name-input" id="nameInput'+task.id+'" type="text" value="'+esc(task.name)+'" onblur="saveName('+task.id+',this.value)" onkeydown="if(event.key===\'Enter\')this.blur();if(event.key===\'Escape\'){editNameFor=null;render();}">'
+    : '<div class="task-name editable" onclick="startEditName('+task.id+')" title="タップして編集">'+esc(task.name)+'</div>';
+  const big = left < 0
+    ? '<div class="dl-big over"><span>期限切れ</span><b>' + (-left) + '</b><span>日</span></div>'
+    : '<div class="dl-big"><span>期限まで あと</span><b>' + left + '</b><span>日</span></div>';
+  const openTxt = !task.leadMonths ? '' : st === "later"
+    ? '<div class="dl-open-line">手続きできるのは <b>' + fmtDate(open) + '</b> から（あと' + daysUntil(open) + '日）</div>'
+    : st === "open" ? '<div class="dl-open-line now">いま手続きできます（' + fmtDate(open) + ' から）</div>' : '';
+  let editBox = "";
+  if (dlEditFor === task.id) {
+    editBox = '<div class="plan-edit"><div class="plan-edit-hd">期限の設定</div>' +
+      '<input type="date" class="date-input" id="dlDate'+task.id+'" value="'+task.deadline+'">' +
+      '<select class="unit-sel" id="dlLead'+task.id+'">' + [0,1,2,3,4,6,12].map(m => '<option value="'+m+'"'+((task.leadMonths||0)===m?' selected':'')+'>'+(m ? '手続きは' + m + 'か月前から' : '期限の日だけ')+'</option>').join('') + '</select>' +
+      '<span class="unit">周期</span><input type="number" min="0" step="any" inputmode="decimal" class="num-input" id="dlCycle'+task.id+'" value="'+(task.cycleYears||"")+'" placeholder="任意" style="width:70px"><span class="unit">年</span>' +
+      '<div class="plan-btns"><button class="primary" onclick="saveDl('+task.id+')">保存</button><button class="cancel" onclick="dlEditFor=null;render()">✕</button></div></div>';
+  }
+  let renewBox = "";
+  if (dlRenewFor === task.id) {
+    const sug = task.cycleYears ? addMonthsStr(task.deadline, task.cycleYears * 12) : "";
+    renewBox = '<div class="plan-edit"><div class="plan-edit-hd">更新しました — 新しい期限は？</div>' +
+      '<input type="date" class="date-input" id="dlNew'+task.id+'" value="'+sug+'">' +
+      (sug ? '<span class="unit">（前回と同じ ' + task.cycleYears + '年後を入れています）</span>' : '') +
+      '<div class="plan-btns"><button class="primary" onclick="renewDl('+task.id+')">保存</button><button class="cancel" onclick="dlRenewFor=null;render()">✕</button></div></div>';
+  }
+  const historyBtn = task.dates.length > 0 ? '<button class="ghost" onclick="openHistory('+task.id+')">🕘 更新の記録 ('+task.dates.length+')</button>' : '';
+  card.innerHTML =
+    '<div class="card-top">' + nameHtml +
+      '<button class="stop-btn" title="やめた習慣に移す" onclick="stopTask('+task.id+')">やめる</button>' +
+      '<button class="icon-btn" title="削除" onclick="removeTask('+task.id+')">🗑</button></div>' +
+    big +
+    '<div class="dl-date">期限 ' + fmtDate(task.deadline) + '</div>' + openTxt +
+    '<button class="interval-mini-link" onclick="dlEditFor='+task.id+';dlRenewFor=null;render()">' + (task.leadMonths ? task.leadMonths + 'か月前から手続き' : '手続きの時期は未設定') + (task.cycleYears ? '・' + task.cycleYears + '年ごとに更新' : '') + '（変更）</button>' +
+    editBox + planHtml(task) + renewBox +
+    '<div class="actions">' +
+      '<button class="primary" onclick="dlRenewFor='+task.id+';dlEditFor=null;render()">✓ 更新した</button>' + historyBtn +
+    '</div>' +
+    '<textarea class="memo-input'+(task.memo ? ' has-memo' : '')+'" rows="1" placeholder="メモ（必要なもの・手続きの場所など）" onchange="saveMemo('+task.id+',this.value)" oninput="this.classList.toggle(\'has-memo\',!!this.value)">' + esc(task.memo || "") + '</textarea>';
+  return card;
+}
+function saveDl(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  const d = document.getElementById("dlDate" + id).value;
+  if (!d) { showToast("期限の日付を選んでください"); return; }
+  t.deadline = d; t.leadMonths = +document.getElementById("dlLead" + id).value || 0;
+  t.cycleYears = parseFloat(document.getElementById("dlCycle" + id).value) || 0;
+  touch(t); save(); dlEditFor = null; render();
+}
+function renewDl(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  const d = document.getElementById("dlNew" + id).value;
+  if (!d) { showToast("新しい期限を選んでください"); return; }
+  // 周期が未設定なら、前の期限との差から覚えておく
+  if (!t.cycleYears) { const yrs = Math.round((new Date(d) - new Date(t.deadline)) / (365.25 * 86400000) * 2) / 2; if (yrs >= 0.5) t.cycleYears = yrs; }
+  const today = todayStr();
+  if (!t.dates.includes(today)) { t.dates.push(today); t.dates.sort(); if (t.dates.length > MAX_HISTORY) t.dates = t.dates.slice(t.dates.length - MAX_HISTORY); }
+  t.deadline = d; t.plan = null;
+  touch(t); save(); dlRenewFor = null; render();
+  showToast("新しい期限を " + fmtShort(new Date(d + "T00:00:00")) + " にしました");
 }
 
 function buildRow(task, days, status) {
@@ -1401,7 +1579,7 @@ function resumeTask(id) {
 
 function switchTab(tab) {
   activeTab = tab;
-  openId = null;
+  openId = null; dlEditFor = null; dlRenewFor = null;
   editIntervalFor = null;
   editNameFor = null;
   render();
@@ -1410,29 +1588,47 @@ function switchTab(tab) {
 function renderAddArea() {
   const area = document.getElementById("addArea");
   if (adding) {
-    area.innerHTML =
-      '<div class="add-card">' +
-        '<input class="text-input" id="newName" placeholder="例：脱毛、歯医者、歯ブラシ交換…" ' +
-          'onkeydown="if(event.key===\'Enter\')confirmAdd();if(event.key===\'Escape\')cancelAdd()">' +
-        '<div class="row"><span class="unit">目安：</span>' +
+    const nm = document.getElementById("newName"); const keep = nm ? nm.value : "";
+    const kindSeg = '<div class="kind-seg"><button type="button" class="' + (addKind === "repeat" ? "on" : "") + '" onclick="setAddKind(\'repeat\')">繰り返すこと</button><button type="button" class="' + (addKind === "deadline" ? "on" : "") + '" onclick="setAddKind(\'deadline\')">期限があること</button></div>';
+    const body = addKind === "deadline"
+      ? '<div class="row"><span class="unit">期限：</span><input type="date" class="date-input" id="newDeadline"></div>' +
+        '<div class="row"><span class="unit">手続きは</span><select class="unit-sel" id="newLead">' + [0,1,2,3,6,12].map(m => '<option value="'+m+'"'+(m===1?' selected':'')+'>'+(m ? m + 'か月前から' : '期限の日だけ')+'</option>').join('') + '</select></div>' +
+        '<div class="row"><span class="unit">更新の周期：</span><input type="number" min="0" step="any" inputmode="decimal" class="num-input" id="newCycle" placeholder="任意"><span class="unit">年ごと（免許なら5など）</span></div>'
+      : '<div class="row"><span class="unit">目安：</span>' +
           '<input type="number" min="1" class="num-input" id="newInterval" placeholder="任意" ' +
             'onkeydown="if(event.key===\'Enter\')confirmAdd()">' +
-          '<span class="unit">日ごと（あとで設定・変更OK）</span></div>' +
+          '<span class="unit">日ごと（あとで設定・変更OK）</span></div>';
+    area.innerHTML =
+      '<div class="add-card">' + kindSeg +
+        '<input class="text-input" id="newName" placeholder="' + (addKind === "deadline" ? '例：運転免許の更新、パスポート、火災保険…' : '例：脱毛、歯医者、歯ブラシ交換…') + '" autocomplete="off" ' +
+          'onkeydown="if(event.key===\'Enter\')confirmAdd();if(event.key===\'Escape\')cancelAdd()">' +
+        body +
         '<div class="btn-row">' +
           '<button class="primary confirm" onclick="confirmAdd()">追加する</button>' +
           '<button class="cancel" onclick="cancelAdd()">✕</button>' +
         '</div>' +
       '</div>';
-    const n = document.getElementById("newName"); if (n) n.focus();
+    const n = document.getElementById("newName"); if (n) { n.value = keep; n.focus(); }
   } else {
     area.innerHTML = '<button class="add-btn" onclick="startAdd()">＋ やることを追加</button>';
   }
 }
 
 // ── 追加フォーム制御 ──
-function startAdd(){ adding = true; render(); }
+function startAdd(){ adding = true; addKind = activeTab === "deadline" ? "deadline" : "repeat"; render(); }
 function cancelAdd(){ adding = false; render(); }
+function setAddKind(k) { addKind = k; renderAddArea(); }
 function confirmAdd(){
+  if (addKind === "deadline") {
+    const name = document.getElementById("newName").value.trim();
+    const dl = document.getElementById("newDeadline").value;
+    if (!name) return;
+    if (!dl) { showToast("期限の日付を選んでください"); return; }
+    tasks.push({ id: Date.now(), name, dates: [], interval: null, memo: "", deleted: false, updatedAt: Date.now(),
+      deadline: dl, leadMonths: +document.getElementById("newLead").value || 0, cycleYears: parseFloat(document.getElementById("newCycle").value) || 0 });
+    activeTab = "deadline"; save(); adding = false; render();
+    return;
+  }
   addTask(document.getElementById("newName").value, document.getElementById("newInterval").value);
 }
 function startEditInterval(id){ editIntervalFor = id; render(); const el=document.getElementById("ivInput"+id); if(el){el.focus();el.select();} }
