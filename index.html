@@ -157,6 +157,37 @@
   .dlg-title { font-size: 15px; font-weight: 700; margin: 2px 0 12px; }
   .dlg-input { width: 100%; font-family: inherit; font-size: 15px; color: var(--ink); background: rgba(42,37,33,.04); border: 1px solid rgba(194,104,62,.3); border-radius: 12px; padding: 10px 12px; outline: none; resize: vertical; margin-bottom: 16px; line-height: 1.6; }
   .dlg-input:focus { border-color: var(--accent); }
+  .set-plan-link { display: block; border: 0; background: none; padding: 0; margin: -6px 0 14px; font: inherit; font-size: 13px; font-weight: 700; color: var(--accent); opacity: .8; cursor: pointer; }
+  .plan-box { margin: -4px 0 14px; padding: 10px 12px; border-radius: 12px; background: rgba(194,104,62,.08); border: 1px dashed rgba(194,104,62,.45); cursor: pointer; }
+  .plan-box.booked { border-style: solid; background: rgba(194,104,62,.12); }
+  .plan-box.passed { border-color: var(--over); }
+  .plan-l { font-size: 11.5px; font-weight: 700; opacity: .6; }
+  .plan-main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .plan-main b { font-size: 17px; }
+  .plan-tag { font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: #fff; color: var(--accent); border: 1px solid rgba(194,104,62,.4); }
+  .plan-box.booked .plan-tag { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .plan-when { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--accent); }
+  .plan-past { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--over); }
+  .plan-gap { font-size: 12.5px; opacity: .7; margin-top: 2px; }
+  .plan-ask { margin-top: 8px; font-size: 13px; font-weight: 700; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--over); }
+  .plan-ask button { font-size: 12.5px; padding: 6px 10px; }
+  .plan-edit { margin: -4px 0 14px; padding: 10px 12px; border-radius: 12px; background: rgba(255,253,250,.8); border: 1px solid rgba(42,37,33,.12); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .plan-edit-hd { width: 100%; font-size: 12px; font-weight: 700; opacity: .6; }
+  .plan-edit .date-input { font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(42,37,33,.18); background: #fff; color: var(--ink); }
+  .plan-kind { display: inline-flex; border-radius: 10px; overflow: hidden; border: 1px solid rgba(194,104,62,.4); }
+  .plan-kind button { border: 0; background: #fff; color: var(--accent); font: inherit; font-size: 13px; font-weight: 700; padding: 8px 12px; cursor: pointer; }
+  .plan-kind button.on { background: var(--accent); color: #fff; }
+  .plan-btns { display: flex; gap: 6px; width: 100%; }
+  .unit-sel { font: inherit; font-size: 15px; padding: 8px; border-radius: 10px; border: 1px solid rgba(42,37,33,.18); background: #fff; color: var(--ink); }
+  .ti-plan { display: inline-block; margin-top: 3px; font-size: 11.5px; font-weight: 700; color: var(--accent); background: rgba(194,104,62,.10); border-radius: 6px; padding: 1px 7px; }
+  .ti-plan.booked { background: var(--accent); color: #fff; }
+  .ti-plan.passed { background: var(--over); color: #fff; }
+  .plan-alert { margin: 0 0 14px; padding: 12px 14px; border-radius: 16px; background: #fff6f3; border: 1px solid rgba(192,57,43,.3); }
+  .pa-hd { font-size: 13px; font-weight: 800; color: var(--over); margin-bottom: 6px; }
+  .pa-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid rgba(192,57,43,.12); }
+  .pa-row:first-of-type { border-top: 0; }
+  .pa-t b { display: block; font-size: 15px; } .pa-t span { font-size: 12px; opacity: .7; }
+  .pa-b { display: flex; gap: 6px; } .pa-b button { font-size: 13px; padding: 7px 12px; }
   .avg-line { font-size: 13px; margin: -4px 0 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
   .avg-line b { color: var(--accent); font-size: 15px; }
   .avg-line .avg-n { font-size: 11.5px; opacity: .5; }
@@ -461,11 +492,13 @@
   </div>
 
 <script>
-const APP_VERSION = "2.20.0";
+const APP_VERSION = "2.21.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
 let editIntervalFor = null;
+let planEditFor = null;      // 次の予定を編集中の項目
+let planKindDraft = "tentative";
 let editNameFor = null;
 let activeTab = "tracked"; // "tracked" or "simple"
 let openId = null; // 一覧で開いている項目（詳細カードを出す）
@@ -565,6 +598,23 @@ function dueDate(lastStr, interval) {
 }
 function esc(s){ return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function lastDate(t){ return t.dates.length ? t.dates[t.dates.length-1] : null; }
+// 目安日数を人に読みやすく（548日 → 約1.5年）
+function ivText(n) {
+  if (!n) return "";
+  if (n >= 330) { const y = Math.round(n / 365.25 * 2) / 2; return "約" + y + "年"; }
+  if (n >= 56) { const m = Math.round(n / 30.4375); return "約" + m + "か月"; }
+  return n + "日";
+}
+// 次の予定（仮／予約済み）。task.plan = { date:"YYYY-MM-DD", kind:"tentative"|"booked" }
+const PLAN_KIND = { tentative: "仮", booked: "予約済み" };
+function daysUntil(s) { const t = new Date(todayStr() + "T00:00:00"), d = new Date(s + "T00:00:00"); return Math.round((d - t) / 86400000); }
+function planGap(task) {   // 予定日が目安の日から何日ずれているか（＋＝遅め）
+  const last = lastDate(task);
+  if (!task.plan || !task.interval || !last) return null;
+  const due = dueDate(last, task.interval);
+  return Math.round((new Date(task.plan.date + "T00:00:00") - due) / 86400000);
+}
+function planPassed(task) { return !!(task.plan && task.plan.date < todayStr()); }
 
 // ── タスク操作 ──
 function addTask(name, interval) {
@@ -596,6 +646,12 @@ function pushDate(task, dateStr) {
     task.dates = task.dates.slice(task.dates.length - MAX_HISTORY);
   }
   pruneNotes(task);
+  // 予定日の60日前より後の日付を記録したら、その予定は済んだものとして外す
+  if (task.plan) {
+    const lim = new Date(task.plan.date + "T00:00:00"); lim.setDate(lim.getDate() - 60);
+    const ls = lim.getFullYear() + "-" + String(lim.getMonth()+1).padStart(2,"0") + "-" + String(lim.getDate()).padStart(2,"0");
+    if (dateStr >= ls) task.plan = null;
+  }
   touch(task);
   save();
 }
@@ -653,7 +709,9 @@ function removeDate(id, date) {
   openHistory(id);
 }
 function saveInterval(id, val) {
-  const iv = parseInt(val, 10);
+  const u = document.getElementById("ivUnit" + id);
+  const mul = u ? (u.value === "y" ? 365.25 : u.value === "m" ? 30.4375 : 1) : 1;
+  const iv = Math.round(parseFloat(val) * mul);
   const task = tasks.find(x => x.id === id);
   if (task) { task.interval = iv > 0 ? iv : null; touch(task); save(); }
   activeTab = iv > 0 ? "tracked" : "simple"; // 振り分け先のタブを表示
@@ -830,6 +888,7 @@ function mergeAndApply(incoming, lww) {
       archived: winner.archived === true,
       archivedAt: winner.archivedAt || "",
       stopNote: winner.stopNote || "",
+      plan: winner.plan && winner.plan.date ? { date: winner.plan.date, kind: winner.plan.kind === "booked" ? "booked" : "tentative" } : null,
       updatedAt: Math.max(cur.updatedAt || 0, imp.updatedAt || 0),
     };
 
@@ -841,6 +900,7 @@ function mergeAndApply(incoming, lww) {
       cur.deleted === merged.deleted &&
       (cur.archived === true) === merged.archived &&
       (cur.stopNote || "") === merged.stopNote &&
+      JSON.stringify(cur.plan || null) === JSON.stringify(merged.plan) &&
       JSON.stringify(cur.dates || []) === JSON.stringify(merged.dates) &&
       JSON.stringify(cur.notes || {}) === JSON.stringify(merged.notes);
     if (samePayload) same++;
@@ -907,8 +967,8 @@ function buildCard(task, i) {
           '<span class="due-unit">日</span>';
 
       const rightSubLabel = status === "over"
-        ? '予定だった ' + dueStr
-        : '予定 ' + dueStr;
+        ? '目安の日 ' + dueStr
+        : '目安の日 ' + dueStr;
 
       displayHtml =
         '<div class="due-track">' +
@@ -945,7 +1005,7 @@ function buildCard(task, i) {
     let intervalLinkHtml;
     if (task.interval && days !== null) {
       // 案C側ではバー内に状況が出ているので、目安変更リンクだけ控えめに
-      intervalLinkHtml = '<button class="interval-mini-link" onclick="startEditInterval('+task.id+')">目安 '+task.interval+'日（変更）</button>';
+      intervalLinkHtml = '<button class="interval-mini-link" onclick="startEditInterval('+task.id+')">目安 '+ivText(task.interval)+(task.interval>=56?'（'+task.interval+'日）':'')+'（変更）</button>';
     } else if (task.interval) {
       // 目安はあるが未記録 → 簡素な案内
       intervalLinkHtml = '<button class="interval-mini-link" onclick="startEditInterval('+task.id+')">目安 '+task.interval+'日（変更）</button>';
@@ -965,9 +1025,9 @@ function buildCard(task, i) {
     if (editIntervalFor === task.id) {
       editHtml =
         '<div class="interval-edit">' +
-          '<input type="number" min="1" class="num-input" id="ivInput'+task.id+'" placeholder="例: 90" value="'+(task.interval||"")+'" ' +
+          '<input type="number" min="0.5" step="any" inputmode="decimal" class="num-input" id="ivInput'+task.id+'" placeholder="例: 90 / 1.5" value="'+(task.interval||"")+'" ' +
             'onkeydown="if(event.key===\'Enter\')saveInterval('+task.id+',this.value);if(event.key===\'Escape\'){editIntervalFor=null;render();}">' +
-          '<span class="unit">日ごと</span>' +
+          '<select class="unit-sel" id="ivUnit'+task.id+'"><option value="d">日ごと</option><option value="m">か月ごと</option><option value="y">年ごと</option></select>' +
           '<button class="primary" onclick="saveInterval('+task.id+',document.getElementById(\'ivInput'+task.id+'\').value)">保存</button>' +
           '<button class="cancel" onclick="editIntervalFor=null;render()">✕</button>' +
         '</div>';
@@ -987,7 +1047,7 @@ function buildCard(task, i) {
       '<div class="card-top">' + nameHtml +
         '<button class="stop-btn" title="やめた習慣に移す" onclick="stopTask('+task.id+')">やめる</button>' +
         '<button class="icon-btn" title="削除" onclick="removeTask('+task.id+')">🗑</button></div>' +
-      displayHtml + intervalLinkHtml + editHtml + avgHtml +
+      displayHtml + intervalLinkHtml + editHtml + planHtml(task) + avgHtml +
       '<div class="actions">' +
         '<button class="primary" onclick="quickDone('+task.id+')">✓ 今日やった！</button>' +
         '<button class="ghost" onclick="openPicker('+task.id+')">📅 日付を選ぶ</button>' +
@@ -1000,6 +1060,58 @@ function buildCard(task, i) {
         'oninput="this.title=this.value;this.classList.toggle(\'has-memo\',!!this.value)">' +
         esc(task.memo || "") + '</textarea>';
     return card;
+}
+
+// ── 次の予定（仮／予約済み） ──
+function planHtml(task) {
+  if (planEditFor === task.id) {
+    const v = task.plan ? task.plan.date : "";
+    return '<div class="plan-edit">' +
+      '<div class="plan-edit-hd">次の予定</div>' +
+      '<input type="date" class="date-input" id="planDate'+task.id+'" value="'+v+'">' +
+      '<div class="plan-kind">' + Object.keys(PLAN_KIND).map(k => '<button type="button" class="'+(planKindDraft===k?'on':'')+'" onclick="planKindDraft=\''+k+'\';render()">'+PLAN_KIND[k]+'</button>').join('') + '</div>' +
+      '<div class="plan-btns"><button class="primary" onclick="savePlan('+task.id+')">保存</button>' +
+      (task.plan ? '<button class="ghost" onclick="clearPlan('+task.id+')">予定を消す</button>' : '') +
+      '<button class="cancel" onclick="planEditFor=null;render()">✕</button></div></div>';
+  }
+  if (!task.plan) return '<button class="set-plan-link" onclick="startEditPlan('+task.id+')">＋ 次の予定を入れる（仮でもOK）</button>';
+  const p = task.plan, du = daysUntil(p.date), gap = planGap(task);
+  const when = du < 0 ? '<span class="plan-past">'+(-du)+'日過ぎ</span>' : du === 0 ? '<span class="plan-when">今日</span>' : '<span class="plan-when">あと'+du+'日</span>';
+  const gapTxt = gap === null ? "" : Math.abs(gap) <= 3 ? "目安どおり" : "目安より" + Math.abs(gap) + "日" + (gap > 0 ? "遅め" : "早め");
+  return '<div class="plan-box '+p.kind+(du < 0 ? ' passed' : '')+'" onclick="startEditPlan('+task.id+')">' +
+    '<div class="plan-l">次の予定</div>' +
+    '<div class="plan-main"><b>'+fmtDate(p.date)+'</b><span class="plan-tag">'+PLAN_KIND[p.kind]+'</span>'+when+'</div>' +
+    (gapTxt ? '<div class="plan-gap">'+gapTxt+'</div>' : '') +
+    (du < 0 ? '<div class="plan-ask" onclick="event.stopPropagation()">予定日を過ぎました。やった？ <button class="primary" onclick="planDone('+task.id+')">やった（'+fmtShort(new Date(p.date+"T00:00:00"))+'で記録）</button><button class="ghost" onclick="openPicker('+task.id+')">別の日にやった</button><button class="ghost" onclick="startEditPlan('+task.id+')">延期する</button></div>' : '') +
+    '</div>';
+}
+function startEditPlan(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  planEditFor = id; planKindDraft = t.plan ? t.plan.kind : "tentative";
+  if (!t.plan) {
+    // まだ予定がなければ、目安の日（なければ1か月後）を初期値に
+    setTimeout(() => { const el = document.getElementById("planDate" + id); if (el && !el.value) { const last = lastDate(t); const d = t.interval && last ? dueDate(last, t.interval) : new Date(Date.now() + 30 * 86400000); el.value = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); } }, 0);
+  }
+  activeTab = t.interval ? "tracked" : "simple"; focusMode = false;
+  openId = id; render();
+}
+function savePlan(id) {
+  const t = tasks.find(x => x.id === id); const el = document.getElementById("planDate" + id);
+  if (!t || !el) return;
+  if (!el.value) { showToast("日付を選んでください"); return; }
+  t.plan = { date: el.value, kind: planKindDraft === "booked" ? "booked" : "tentative" };
+  touch(t); save(); planEditFor = null; render();
+  showToast("次の予定を " + fmtShort(new Date(el.value + "T00:00:00")) + "（" + PLAN_KIND[t.plan.kind] + "）にしました");
+}
+function clearPlan(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  t.plan = null; touch(t); save(); planEditFor = null; render();
+}
+function planDone(id) {
+  const t = tasks.find(x => x.id === id); if (!t || !t.plan) return;
+  const d = t.plan.date;
+  pushDate(t, d); t.plan = null; touch(t); save(); render();
+  showToast(fmtShort(new Date(d + "T00:00:00")) + " を記録", null, () => editNote(id, d));
 }
 
 // 替えどき(目安)が近い順: 残り日数の少ない順。未記録は末尾。
@@ -1017,9 +1129,8 @@ function sortByDue(a, b) {
   const gb = db === null ? 3 : STATUS_RANK[statusOf(b, db).status];
   if (ga !== gb) return ga - gb;
   if (ga === 0) return (db / b.interval) - (da / a.interval); // 過ぎたものは、目安に対して過ぎている割合が大きい順
-  const ra = da === null ? Infinity : a.interval - da;
-  const rb = db === null ? Infinity : b.interval - db;
-  return ra - rb;
+  const eff = (t, d) => t.plan ? daysUntil(t.plan.date) : (d === null ? Infinity : t.interval - d);
+  return eff(a, da) - eff(b, db);
 }
 // 経過日数が多い順(ずっとやってない順)。未記録は末尾。
 function sortByElapsed(a, b) {
@@ -1046,6 +1157,18 @@ function render() {
   const simple = active.filter(t => !t.interval).sort(sortByElapsed);
   const stopped = visible.filter(t => t.archived).sort((a, b) => String(b.archivedAt || "").localeCompare(String(a.archivedAt || "")));
 
+  // 予定日を過ぎたもの：「やった？」と聞く
+  const passed = active.filter(planPassed);
+  if (passed.length) {
+    const box = document.createElement("div");
+    box.className = "plan-alert";
+    box.innerHTML = '<div class="pa-hd">予定日を過ぎたもの — やった？</div>' + passed.map(t =>
+      '<div class="pa-row"><div class="pa-t"><b></b><span>' + fmtShort(new Date(t.plan.date + "T00:00:00")) + '（' + PLAN_KIND[t.plan.kind] + '）</span></div>' +
+      '<div class="pa-b"><button class="primary" data-pd="' + t.id + '">やった</button><button class="ghost" data-pe="' + t.id + '">延期</button></div></div>').join('');
+    passed.forEach((t, i) => { box.querySelectorAll(".pa-t b")[i].textContent = t.name; });
+    box.onclick = (e) => { const d = e.target.closest("[data-pd]"), p = e.target.closest("[data-pe]"); if (d) planDone(+d.dataset.pd); if (p) startEditPlan(+p.dataset.pe); };
+    grid.appendChild(box);
+  }
   // タブバー
   const tabbar = document.createElement("div");
   tabbar.className = "tabbar";
@@ -1178,8 +1301,9 @@ function buildRow(task, days, status) {
   row.className = "ti " + (ol ? "over lv" + ol.lv : status === "soon" ? "soon" : "");
   const last = lastDate(task);
   let sub = last ? "最終 " + fmtShort(new Date(last + "T00:00:00")) : "まだ記録なし";
-  if (task.interval) sub += " ・ 目安 " + task.interval + "日";
+  if (task.interval) sub += " ・ 目安 " + ivText(task.interval);
   if (task.memo) sub += " ・ " + task.memo.split("\n")[0];
+  const planChip = task.plan ? '<span class="ti-plan ' + task.plan.kind + (planPassed(task) ? ' passed' : '') + '">' + (() => { const [y, m, d] = task.plan.date.split("-").map(Number); const md = (y !== new Date().getFullYear() ? y + "/" : "") + m + "/" + d; return planPassed(task) ? "予定 " + md + " を過ぎた" : "次 " + md + "（" + PLAN_KIND[task.plan.kind] + "）"; })() + '</span>' : '';
   let bar = "";
   if (task.interval && days !== null) {
     const r = Math.min(days / task.interval, 1);
@@ -1197,7 +1321,7 @@ function buildRow(task, days, status) {
       : '<span class="l">' + (ol ? ol.label : "超過") + '</span><span class="n">' + (-rest) + '</span><span class="u">日</span>';
   } else num = '<span class="l">' + (days === 0 ? "今日" : "") + '</span><span class="n">' + days + '</span><span class="u">日前</span>';
   row.innerHTML =
-    '<div class="ti-main"><div class="ti-name"></div><div class="ti-sub"></div>' + bar + '</div>' +
+    '<div class="ti-main"><div class="ti-name"></div><div class="ti-sub"></div>' + planChip + bar + '</div>' +
     '<div class="ti-num">' + num + '</div>' +
     '<button class="ti-done" title="今日やった">✓</button>';
   row.querySelector(".ti-name").textContent = task.name;
