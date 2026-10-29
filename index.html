@@ -488,6 +488,7 @@
     margin-top: 4px;
   }
 </style>
+<script>/* iPhoneが容量不足のときに保存データを消さないよう、端末にお願いしておく */try{navigator.storage&&navigator.storage.persist&&navigator.storage.persisted().then(function(p){if(!p)navigator.storage.persist();});}catch(e){}</script>
 </head>
 <body>
   <div class="shell">
@@ -514,7 +515,7 @@
   </div>
 
 <script>
-const APP_VERSION = "2.23.0";
+const APP_VERSION = "2.24.0";
 const STORE_KEY = "elapsed_tracker_tasks_v1";
 let tasks = [];
 let adding = false;
@@ -1985,6 +1986,29 @@ cloudSync();
     window.addEventListener('orientationchange', () => setTimeout(() => { baseH = vv.height; follow(600); }, 300));
     apply();
   })();
+</script>
+<script>
+/* バックアップのお知らせ：前回から30日たったら、画面の上にそっと出す（×で7日おやすみ） */
+(function () {
+  var KEYS = ["elapsed_tracker_lastsync_v1", "elapsed_tracker_gist_v1"], OWN = "areday.bkNudge", DAY = 86400000;
+  function num(k) { try { var v = localStorage.getItem(k); if (!v) return 0; var n = Number(v); if (n) return n; var o = JSON.parse(v); return (o && (o.at || o.lastAt)) || 0; } catch (e) { return 0; } }
+  function last() { var m = 0; KEYS.concat([OWN]).forEach(function (k) { m = Math.max(m, num(k)); }); return m; }
+  window.bkNudgeMark = function () { try { localStorage.setItem(OWN, String(Date.now())); } catch (e) {} var el = document.getElementById('bk-nudge'); if (el) el.remove(); };
+  function show() {
+    var now = Date.now(), first = num(OWN + '.first'), snooze = num(OWN + '.snooze');
+    if (!first) { try { localStorage.setItem(OWN + '.first', String(now)); } catch (e) {} first = now; }
+    if (snooze && now < snooze) return;
+    var t = last(), days = Math.floor((now - (t || first)) / DAY);
+    if (days < 30) return;
+    var el = document.createElement('div'); el.id = 'bk-nudge';
+    el.setAttribute('style', 'position:fixed;left:12px;right:12px;margin:0 auto;width:fit-content;top:calc(env(safe-area-inset-top,0px) + 10px);z-index:8000;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:8px 8px 8px 14px;border-radius:999px;background:rgba(28,28,30,.92);color:#fff;font:600 13px/1.4 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.18);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)');
+    var msg = t ? ('前回のバックアップから' + days + '日。設定から書き出しておくと安心です') : 'まだバックアップがありません。設定から書き出しておくと安心です';
+    el.innerHTML = '<span>💾</span><span style="flex:1">' + msg + '</span><button type="button" aria-label="閉じる" style="flex:none;width:26px;height:26px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:14px;line-height:1;cursor:pointer">×</button>';
+    el.querySelector('button').onclick = function () { try { localStorage.setItem(OWN + '.snooze', String(Date.now() + 7 * DAY)); } catch (e) {} el.remove(); };
+    document.body.appendChild(el);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(show, 1200); }); else setTimeout(show, 1200);
+})();
 </script>
 </body>
 </html>
